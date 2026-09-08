@@ -57,7 +57,7 @@ subprojects {
         "implementation"("commons-lang:commons-lang:20030203.000129")
         "implementation"("org.springdoc:springdoc-openapi-starter-webmvc-ui")
         "implementation"("com.thoughtworks.xstream:xstream:1.4.21")
-        "implementation"("com.google.guava:guava:33.5.0-android")
+        "implementation"("com.google.guava:guava:33.7.1-android")
         "implementation"("org.apache.httpcomponents:httpclient:4.5.14")
         "implementation"("com.github.ben-manes.caffeine:caffeine")
         "implementation"("org.apache.commons:commons-lang3:3.20.0")
