@@ -53,7 +53,7 @@ subprojects {
     }
 
     dependencies {
-        "implementation"("ch.qos.logback:logback-core:1.5.20")
+        "implementation"("ch.qos.logback:logback-core:1.6.3")
         "implementation"("commons-lang:commons-lang:20030203.000129")
         "implementation"("org.springdoc:springdoc-openapi-starter-webmvc-ui")
         "implementation"("com.thoughtworks.xstream:xstream:1.4.21")
