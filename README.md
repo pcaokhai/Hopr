@@ -66,7 +66,7 @@ flowchart TD
 
     subgraph "Edge & Routing Layer"
         Gateway -->|POST /shorten| Shortener["shortener-service\n(:8080)"]
-        Gateway -->|GET /{shortKey}| Resolver["resolver-service\n(:8083)"]
+        Gateway -->|"GET /{shortKey}"| Resolver["resolver-service\n(:8083)"]
     end
 
     subgraph "Core Microservices"
