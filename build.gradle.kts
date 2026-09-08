@@ -44,7 +44,7 @@ subprojects {
     the<io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension>().apply {
         imports {
             mavenBom("org.springframework.boot:spring-boot-dependencies:4.1.1")
-            mavenBom("org.springframework.cloud:spring-cloud-dependencies:2025.1.2")
+            mavenBom("org.springframework.cloud:spring-cloud-dependencies:2025.1.3")
         }
         dependencies {
             dependency("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0")
