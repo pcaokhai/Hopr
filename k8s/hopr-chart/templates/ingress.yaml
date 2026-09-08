@@ -1,0 +1,43 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hopr-ingress
+  namespace: {{ .Values.namespace }}
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/limit-rps: "5"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS, PUT, DELETE"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /shorten
+            pathType: Exact
+            backend:
+              service:
+                name: shortener-service
+                port:
+                  number: {{ .Values.config.shortenerServerPort }}
+          # ponytail: negative lookahead excludes "shorten" so this regex (sorted
+          # ahead of the exact /shorten path by ingress-nginx's use-regex length-based
+          # ordering) can't shadow it. Upgrade path: split into two Ingress objects
+          # (one Exact, one regex) if more reserved literal paths are added later.
+          - path: /(?!shorten$)[a-zA-Z0-9_-]{4,}
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: resolver-service
+                port:
+                  number: {{ .Values.config.resolverServerPort }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: shortener-service
+                port:
+                  number: {{ .Values.config.shortenerServerPort }}

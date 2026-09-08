@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keygen-service
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keygen-service
+  template:
+    metadata:
+      labels:
+        app: keygen-service
+    spec:
+      containers:
+        - name: keygen-service
+          image: "hopr/keygen-service:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.config.keygenServerPort }}
+          envFrom:
+            - configMapRef:
+                name: hopr-config
+            - secretRef:
+                name: hopr-secret
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ .Values.config.keygenServerPort }}
+            failureThreshold: 12
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ .Values.config.keygenServerPort }}
+            initialDelaySeconds: 25
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ .Values.config.keygenServerPort }}
+            initialDelaySeconds: 40
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keygen-service
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: keygen-service
+  ports:
+    - port: {{ .Values.config.keygenServerPort }}
+      targetPort: {{ .Values.config.keygenServerPort }}

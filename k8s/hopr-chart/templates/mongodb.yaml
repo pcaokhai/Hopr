@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hopr-mongodb
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hopr-mongodb
+  template:
+    metadata:
+      labels:
+        app: hopr-mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: {{ .Values.mongodb.image }}
+          ports:
+            - containerPort: 27017
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: {{ .Values.mongodb.rootUsername | quote }}
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              value: {{ .Values.mongodb.rootPassword | quote }}
+            - name: MONGO_INITDB_DATABASE
+              value: {{ .Values.mongodb.database | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hopr-mongodb
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: hopr-mongodb
+  ports:
+    - port: 27017
+      targetPort: 27017

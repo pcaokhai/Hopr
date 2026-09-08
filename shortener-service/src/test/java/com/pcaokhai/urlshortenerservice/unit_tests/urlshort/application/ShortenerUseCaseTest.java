@@ -1,0 +1,87 @@
+package com.pcaokhai.urlshortenerservice.unit_tests.urlshort.application;
+
+import com.pcaokhai.urlshortenerservice.config.ShortenerProperties;
+import com.pcaokhai.urlshortenerservice.urlshort.application.AliasValidationComposite;
+import com.pcaokhai.urlshortenerservice.urlshort.application.KeyGenResolver;
+import com.pcaokhai.urlshortenerservice.urlshort.application.ShortenerUseCase;
+import com.pcaokhai.common.url.model.dto.ShortenRequest;
+import com.pcaokhai.common.url.model.dto.ShortenResponse;
+import com.pcaokhai.urlshortenerservice.urlshort.infra.DB.DbCacheSaver;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+public class ShortenerUseCaseTest {
+
+    @Mock
+    private ShortenerProperties domainProperties;
+
+    @Mock
+    private AliasValidationComposite aliasValidation;
+
+    @Mock
+    private KeyGenResolver keyGenResolver;
+
+    @Mock
+    private DbCacheSaver dbCacheSaver;
+
+    @InjectMocks
+    private ShortenerUseCase useCase;
+
+    @Test
+    void shorten_withValidAlias_returnsShortUrl() {
+        String alias = "myAlias";
+        String longUrl = "https://example.com";
+        ShortenRequest req = new ShortenRequest(longUrl, alias);
+        when(keyGenResolver.resolveShortKey(alias)).thenReturn(alias);
+        when(domainProperties.toString()).thenReturn("https://short.ly/");
+        ShortenResponse resp = useCase.shorten(req);
+        assertEquals("https://short.ly/" + alias, resp.shortUrl());
+        verify(aliasValidation).validate(alias);
+        verify(keyGenResolver).resolveShortKey(alias);
+        verify(dbCacheSaver).saveUrlMapping(
+                argThat(mapping ->
+                        mapping.getShortKey().equals(alias) &&
+                                mapping.getLongUrl().equals(longUrl) &&
+                                mapping.getAlias().equals(alias)
+                )
+        );
+    }
+
+    @Test
+    void shorten_whenAliasInvalid_throwsAndSkipsGeneration() {
+        String alias = "bad!";
+        ShortenRequest req = new ShortenRequest("https://x.com", alias);
+        doThrow(new IllegalArgumentException("Invalid"))
+                .when(aliasValidation).validate(alias);
+        assertThrows(IllegalArgumentException.class, () -> useCase.shorten(req));
+        verify(aliasValidation).validate(alias);
+        verifyNoInteractions(keyGenResolver);
+        verifyNoInteractions(dbCacheSaver);
+    }
+
+    @Test
+    void shorten_withoutAlias_generatesKeyAndSaves() {
+        String generated = "abc123";
+        ShortenRequest req = new ShortenRequest("https://foo.com", null);
+        when(keyGenResolver.resolveShortKey(null)).thenReturn(generated);
+        when(domainProperties.toString()).thenReturn("https://short.ly/");
+        ShortenResponse resp = useCase.shorten(req);
+        assertEquals("https://short.ly/" + generated, resp.shortUrl());
+        verify(aliasValidation).validate(null);
+        verify(keyGenResolver).resolveShortKey(null);
+        verify(dbCacheSaver).saveUrlMapping(
+                argThat(mapping ->
+                        mapping.getShortKey().equals(generated) &&
+                                mapping.getLongUrl().equals("https://foo.com") &&
+                                mapping.getAlias() == null
+                )
+        );
+    }
+}

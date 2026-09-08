@@ -1,0 +1,26 @@
+server:
+  port: ${RESOLVER_SERVER_PORT}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+spring:
+  mongodb:
+    uri: ${MONGO_URI}
+  data:
+    redis:
+      port: ${REDIS_PORT}
+      cluster:
+        nodes:
+          - ${REDIS_NODE_1}
+          - ${REDIS_NODE_2}
+          - ${REDIS_NODE_3}
+          - ${REDIS_NODE_4}
+          - ${REDIS_NODE_5}
+          - ${REDIS_NODE_6}

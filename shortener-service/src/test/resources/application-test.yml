@@ -1,0 +1,41 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: shortener-service
+  cloud:
+    config:
+      enabled: false
+  config:
+    import: ""
+  mongodb:
+    host: localhost
+    port: 27017
+    uri: mongodb://localhost:27017/shortener-test
+    username: root
+    password: test
+    database: shortener-test
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: test
+      client-type: lettuce
+      timeout: 6
+      cluster:
+        nodes:
+          - 127.0.0.1:6379
+          - 127.0.0.1:6379
+          - 127.0.0.1:6379
+
+  cache:
+    type: redis
+
+shortener:
+  domain: http://localhost:80/
+
+keygen:
+  service:
+    url: http://localhost:8081

@@ -1,0 +1,9 @@
+spring:
+  cloud:
+    config:
+      enabled: false
+  config:
+    import: ""
+
+server:
+  port: ${KEYGEN_SERVER_PORT:8085}

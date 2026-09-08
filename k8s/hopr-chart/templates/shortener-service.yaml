@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shortener-service
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shortener-service
+  template:
+    metadata:
+      labels:
+        app: shortener-service
+    spec:
+      containers:
+        - name: shortener-service
+          image: "hopr/shortener-service:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.config.shortenerServerPort }}
+          envFrom:
+            - configMapRef:
+                name: hopr-config
+            - secretRef:
+                name: hopr-secret
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ .Values.config.shortenerServerPort }}
+            failureThreshold: 12
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ .Values.config.shortenerServerPort }}
+            initialDelaySeconds: 25
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ .Values.config.shortenerServerPort }}
+            initialDelaySeconds: 40
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shortener-service
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: shortener-service
+  ports:
+    - port: {{ .Values.config.shortenerServerPort }}
+      targetPort: {{ .Values.config.shortenerServerPort }}

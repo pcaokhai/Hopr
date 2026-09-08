@@ -1,0 +1,25 @@
+namespace: hopr
+
+image:
+  tag: local
+  pullPolicy: Never
+
+mongodb:
+  image: mongo:7.0
+  rootUsername: root
+  rootPassword: password
+  database: Hopr
+
+redis:
+  # Must match the release name used for `helm install <name> bitnami/redis-cluster`
+  releaseName: hopr-redis
+  port: "6379"
+  password: ""
+  timeout: "6000"
+  nodeCount: 6
+
+config:
+  shortenerServerPort: "8080"
+  resolverServerPort: "8083"
+  keygenServerPort: "8081"
+  shortenerDomain: "http://localhost:8888/"

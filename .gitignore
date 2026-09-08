@@ -1,0 +1,42 @@
+# Gradle
+build/
+.gradle/
+
+# Maven (legacy, pre-Gradle-migration artifacts)
+target/
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Eclipse
+.project
+.classpath
+.settings/
+bin/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.env
+.env.local
+.env.*
+stack.override.yml
+data/
+
+# Others
+*.swp

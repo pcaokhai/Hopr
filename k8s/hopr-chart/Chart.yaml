@@ -1,0 +1,6 @@
+apiVersion: v2
+name: hopr
+description: Local Kubernetes deployment of the Hopr URL shortener stack
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

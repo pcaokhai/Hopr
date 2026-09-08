@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hopr-config
+  namespace: {{ .Values.namespace }}
+data:
+  {{- range $i := until (int .Values.redis.nodeCount) }}
+  REDIS_NODE_{{ add $i 1 }}: "{{ $.Values.redis.releaseName }}-redis-cluster-{{ $i }}.{{ $.Values.redis.releaseName }}-redis-cluster-headless:6379"
+  {{- end }}
+  REDIS_PORT: {{ .Values.redis.port | quote }}
+  REDIS_TIMEOUT: {{ .Values.redis.timeout | quote }}
+  SPRING_CACHE_TYPE: "redis"
+  SHORTENER_SERVER_PORT: {{ .Values.config.shortenerServerPort | quote }}
+  RESOLVER_SERVER_PORT: {{ .Values.config.resolverServerPort | quote }}
+  KEYGEN_SERVER_PORT: {{ .Values.config.keygenServerPort | quote }}
+  SHORTENER_DOMAIN: {{ .Values.config.shortenerDomain | quote }}

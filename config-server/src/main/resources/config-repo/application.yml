@@ -1,0 +1,12 @@
+spring:
+  data:
+    redis:
+      password: ${REDIS_PASSWORD}
+      client-type: lettuce
+      timeout: ${REDIS_TIMEOUT}
+  cache:
+    type: ${SPRING_CACHE_TYPE}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
