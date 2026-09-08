@@ -60,7 +60,7 @@ subprojects {
         "implementation"("com.google.guava:guava:33.5.0-android")
         "implementation"("org.apache.httpcomponents:httpclient:4.5.14")
         "implementation"("com.github.ben-manes.caffeine:caffeine")
-        "implementation"("org.apache.commons:commons-lang3:3.19.0")
+        "implementation"("org.apache.commons:commons-lang3:3.20.0")
         "testImplementation"("org.springframework.boot:spring-boot-starter-test")
     }
 
