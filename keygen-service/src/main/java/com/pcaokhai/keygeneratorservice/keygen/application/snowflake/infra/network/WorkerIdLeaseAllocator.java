@@ -17,10 +17,12 @@ package com.pcaokhai.keygeneratorservice.keygen.application.snowflake.infra.netw
 
 import com.pcaokhai.keygeneratorservice.keygen.application.snowflake.exception.WorkerIdExhaustedException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -40,6 +42,11 @@ public class WorkerIdLeaseAllocator {
     public static final int MAX_WORKER_ID = 1024;
     private static final String LEASE_KEY_PREFIX = "keygen:worker-lease:";
     private static final Duration LEASE_TTL = Duration.ofSeconds(30);
+    private static final DefaultRedisScript<Long> RENEW_IF_OWNER_SCRIPT = new DefaultRedisScript<>(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then "
+                    + "return redis.call('expire', KEYS[1], ARGV[2]) "
+                    + "else return 0 end",
+            Long.class);
 
     private final StringRedisTemplate redisTemplate;
     private final String instanceId = UUID.randomUUID().toString();
@@ -69,7 +76,8 @@ public class WorkerIdLeaseAllocator {
 
     @Scheduled(fixedDelay = 10_000)
     void renewLease() {
-        redisTemplate.expire(leaseKey(workerId), LEASE_TTL);
+        redisTemplate.execute(RENEW_IF_OWNER_SCRIPT,
+                List.of(leaseKey(workerId)), instanceId, String.valueOf(LEASE_TTL.getSeconds()));
     }
 
     private String leaseKey(long id) {
