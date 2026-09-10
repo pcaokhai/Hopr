@@ -1,6 +1,7 @@
 package com.pcaokhai.keygeneratorservice.integration_tests.keygen.application;
 
 import com.pcaokhai.keygeneratorservice.keygen.application.KeyGenUseCase;
+import com.pcaokhai.keygeneratorservice.keygen.application.snowflake.infra.network.WorkerIdLeaseAllocator;
 import com.pcaokhai.keygeneratorservice.keygen.application.snowflake.infra.time.TimeStampProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,9 @@ import static org.mockito.Mockito.when;
 public class KeyGenUseCaseIntegrationTest {
     @MockitoBean
     private TimeStampProvider timeStampProvider;
+
+    @MockitoBean
+    private WorkerIdLeaseAllocator workerIdLeaseAllocator;
 
     @Autowired
     private KeyGenUseCase keyGenUseCase;
