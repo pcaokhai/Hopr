@@ -4,7 +4,7 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.1-brightgreen.svg?style=flat-square&logo=springboot)](https://spring.io/projects/spring-boot)
 [![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2025.1.2%20(Oakwood)-blue.svg?style=flat-square)](https://spring.io/projects/spring-cloud)
 [![Gradle](https://img.shields.io/badge/Gradle-9.4.1-02303A.svg?style=flat-square&logo=gradle)](https://gradle.org/)
-[![Docker](https://img.shields.io/badge/Docker-Compose%20%7C%20Swarm-2496ED.svg?style=flat-square&logo=docker)](https://www.docker.com/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg?style=flat-square&logo=docker)](https://www.docker.com/)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-Helm%20%7C%20kind-326CE5.svg?style=flat-square&logo=kubernetes)](https://kubernetes.io/)
 [![Redis](https://img.shields.io/badge/Redis-6--Node%20Cluster-DC382D.svg?style=flat-square&logo=redis)](https://redis.io/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-7.0-47A248.svg?style=flat-square&logo=mongodb)](https://www.mongodb.com/)
@@ -49,7 +49,7 @@ Designed with clean architecture and domain-driven principles, Hopr eliminates c
 - **Decentralized, Collision-Free Key Generation**: Uses a 64-bit Twitter Snowflake algorithm (timestamp + worker ID + sequence) coupled with Base62 encoding. Generates 7-character URL-safe slugs without database auto-increment locks or central coordination overhead.
 - **Sub-Millisecond Read Latency**: Read operations bypass database lookups via an in-memory Caffeine local cache backed by a distributed **6-node Redis Cluster** (3 masters + 3 replicas). MongoDB Atlas / Mongo 7.0 acts as durable cold storage.
 - **Lightweight Edge API Gateway**: Powered by Nginx on port `80`, handling North-South routing, CORS preflight (`OPTIONS`), and socket-level token bucket rate limiting (5 req/s, burst 10) with negligible memory footprint (~20MB RAM) and zero GC pauses.
-- **Cloud-Native Service Discovery**: Eliminates heavyweight JVM service registries (Netflix Eureka) in favor of container platform discovery (Docker Compose internal DNS, Docker Swarm IPVS VIPs, and Kubernetes CoreDNS/kube-proxy).
+- **Cloud-Native Service Discovery**: Eliminates heavyweight JVM service registries (Netflix Eureka) in favor of container platform discovery (Docker Compose internal DNS and Kubernetes CoreDNS/kube-proxy).
 - **Centralized Spring Cloud Config Server**: Native repository-backed configuration server delivering environment-agnostic properties to all downstream microservices at startup.
 - **Strict Quality Enforcement**: Enforced build-time JaCoCo verification rule requiring a minimum of **85% line coverage** across modules.
 - **Modern Java & Spring Ecosystem**: Upgraded to **Java 25** (OpenJDK Temurin), **Spring Boot 4.1.1**, **Spring Cloud 2025.1.2 (Oakwood)**, and **Gradle 9.4.1 (Kotlin DSL)**.
@@ -157,7 +157,7 @@ sequenceDiagram
 | **Key Generation Algorithm** | Snowflake + Base62 | 64-bit timestamp + worker ID + sequence with Base62 character mapping |
 | **API Documentation** | OpenAPI 3 | **springdoc-openapi 3.1.0** (Swagger UI on `/swagger-ui.html`) |
 | **Code Coverage** | JaCoCo | Enforced build verification (Bundle line coverage $\ge 85\%$) |
-| **Orchestration** | Docker / Kubernetes | Docker Compose V2, Docker Swarm (`stack.yml`), Kubernetes Helm Chart (`kind`) |
+| **Orchestration** | Docker / Kubernetes | Docker Compose V2, Kubernetes Helm Chart (`kind`) |
 
 ---
 
@@ -397,7 +397,6 @@ Hopr/
 │   ├── deploy.sh              # Local k8s automated deployment script
 │   └── README.md
 ├── docker-compose.yml         # Local multi-container Docker Compose definition
-├── stack.yml                  # Production-ready Docker Swarm stack
 ├── build.gradle.kts           # Multi-project root Gradle build (Kotlin DSL)
 ├── settings.gradle.kts        # Gradle module declarations
 ├── .env                       # Local environment variables

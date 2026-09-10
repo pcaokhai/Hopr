@@ -2,7 +2,7 @@
 
 This directory contains a **local-only** Kubernetes deployment of the Hopr
 stack, built for manual testing on `kind`. It does not replace or modify
-`docker-compose.yml`, `stack.yml`, or `.env` at the repo root — those remain
+`docker-compose.yml` or `.env` at the repo root — those remain
 untouched and independently usable.
 
 ## Prerequisites
