@@ -20,6 +20,13 @@ scylladb:
   # covers non-Seastar allocations (JMX, tooling) so the pod is not OOMKilled.
   memoryLimit: 2G
   storage: 5Gi
+  # Left unset so the chart deploys on any cluster's default provisioner.
+  # The chart runs Scylla in production mode (no --developer-mode), whose
+  # environment checks expect an XFS data volume: for a real deployment set this
+  # to an XFS-backed StorageClass (and/or bake io_properties into the image).
+  # On an ext4 default class the filesystem check is a startup error, and the
+  # first-boot iotune run on a cpu-capped pod can take many minutes.
+  storageClassName: ""
 
 redis:
   # Must match the release name used for `helm install <name> bitnami/redis-cluster`
