@@ -138,7 +138,9 @@ sequenceDiagram
 | **`keygen-service`** | Spring Boot 4 / Java 25 | `8081` | Dedicated worker generating 64-bit Snowflake IDs encoded into Base62 URL slugs. |
 | **`config-server`** | Spring Cloud Config | `8888` | Centralized external configuration repository for all microservices. |
 | **`common`** | Java Library (JAR) | — | Shared domain entities (`UrlMapping`), DTOs, and exception models. |
+| **`db-migration`** | Flyway / CQL | — | Versioned ScyllaDB schema migrations — see `db-migration/README.md`. |
 | **`mongodb`** | MongoDB 7.0 | `27017` | Persistent document storage for URL mappings and metadata. |
+| **`scylla-node-1` .. `3`** | ScyllaDB 6.2 | `9042-9044` | 3-node wide-column cluster (keyspace `hopr`, RF 3). Schema only; no service reads it yet. |
 | **`redis-cluster`** | Redis 7.x (6 Nodes) | `7001-7006` | Distributed, sharded cache layer (3 master nodes, 3 replica nodes). |
 
 ---
@@ -154,6 +156,7 @@ sequenceDiagram
 | **Distributed Caching** | Redis | **6-node Redis Cluster** (sharded, master-replica replication) |
 | **Local In-Memory Cache** | Caffeine | In-process cache for ultra-hot path resolution |
 | **Persistence** | MongoDB | **MongoDB 7.0**, indexing on `alias` / `_id` |
+| **Wide-Column Store** | ScyllaDB | **ScyllaDB 6.2**, 3 nodes at RF 3, schema managed by Flyway CQL migrations |
 | **Key Generation Algorithm** | Snowflake + Base62 | 64-bit timestamp + worker ID + sequence with Base62 character mapping |
 | **API Documentation** | OpenAPI 3 | **springdoc-openapi 3.1.0** (Swagger UI on `/swagger-ui.html`) |
 | **Code Coverage** | JaCoCo | Enforced build verification (Bundle line coverage $\ge 85\%$) |
@@ -197,7 +200,7 @@ docker compose up -d --build
 ```
 
 This command will:
-1. Initialize the **MongoDB** instance and data volume.
+1. Initialize the **MongoDB** instance and data volume, plus the **3-node ScyllaDB** cluster (schema applied separately — see `db-migration/README.md`).
 2. Spin up **6 Redis nodes** and execute the one-shot `redis-cluster-init` container to form the cluster.
 3. Start the **Config Server** and wait for it to be ready.
 4. Launch **`keygen-service`**, **`shortener-service`**, and **`resolver-service`**.
