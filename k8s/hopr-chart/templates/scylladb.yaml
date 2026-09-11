@@ -44,10 +44,18 @@ spec:
             - {{ .Values.scylladb.smp | quote }}
             - "--memory"
             - {{ .Values.scylladb.memory | quote }}
-            - "--overprovisioned"
-            - "1"
-            - "--developer-mode"
-            - "1"
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          resources:
+            requests:
+              cpu: {{ .Values.scylladb.smp | quote }}
+              memory: {{ .Values.scylladb.memoryLimit | quote }}
+            limits:
+              cpu: {{ .Values.scylladb.smp | quote }}
+              memory: {{ .Values.scylladb.memoryLimit | quote }}
           ports:
             - name: cql
               containerPort: 9042
@@ -55,7 +63,7 @@ spec:
               containerPort: 7000
           readinessProbe:
             exec:
-              command: ["/bin/sh", "-c", "nodetool status | grep -q '^UN'"]
+              command: ["/bin/sh", "-c", "nodetool status | grep -qE \"^UN[[:space:]]+$POD_IP[[:space:]]\""]
             initialDelaySeconds: 60
             periodSeconds: 15
             failureThreshold: 20

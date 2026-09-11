@@ -16,8 +16,10 @@ scylladb:
   replicas: 3
   smp: 1
   memory: 1G
+  # Container memory request/limit: --memory is Seastar's budget; the extra ~1G
+  # covers non-Seastar allocations (JMX, tooling) so the pod is not OOMKilled.
+  memoryLimit: 2G
   storage: 5Gi
-  keyspace: hopr
 
 redis:
   # Must match the release name used for `helm install <name> bitnami/redis-cluster`
