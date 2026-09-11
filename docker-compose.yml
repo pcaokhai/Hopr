@@ -193,6 +193,7 @@ services:
       - "8081:8081"
     depends_on:
       - config-server
+      - redis-cluster-init
     networks:
       - default
 

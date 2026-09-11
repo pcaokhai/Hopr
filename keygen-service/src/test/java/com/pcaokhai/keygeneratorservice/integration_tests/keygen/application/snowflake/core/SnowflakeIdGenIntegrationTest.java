@@ -2,11 +2,13 @@ package com.pcaokhai.keygeneratorservice.integration_tests.keygen.application.sn
 
 import com.pcaokhai.keygeneratorservice.keygen.application.snowflake.core.SnowflakeIdGen;
 import com.pcaokhai.keygeneratorservice.keygen.application.snowflake.exception.RegressiveClockException;
+import com.pcaokhai.keygeneratorservice.keygen.application.snowflake.infra.network.WorkerIdLeaseAllocator;
 import com.pcaokhai.keygeneratorservice.keygen.application.snowflake.infra.time.TimeStampProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -17,6 +19,9 @@ import static org.springframework.test.util.ReflectionTestUtils.setField;
 @SpringBootTest
 @ActiveProfiles("test")
 public class SnowflakeIdGenIntegrationTest {
+    @MockitoBean
+    private WorkerIdLeaseAllocator workerIdLeaseAllocator;
+
     @Autowired
     private SnowflakeIdGen snowflakeIdGen;
 

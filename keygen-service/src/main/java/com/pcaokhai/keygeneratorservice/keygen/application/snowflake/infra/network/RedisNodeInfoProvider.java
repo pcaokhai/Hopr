@@ -1,0 +1,47 @@
+/*
+ * Copyright 2025 the original author.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.pcaokhai.keygeneratorservice.keygen.application.snowflake.infra.network;
+
+import org.springframework.stereotype.Component;
+
+import static com.pcaokhai.keygeneratorservice.keygen.application.snowflake.utils.SnowflakeConstants.MACHINE_ID_BITS;
+
+/**
+ * NodeInfoProvider backed by a Redis-coordinated worker ID (see {@link WorkerIdLeaseAllocator}),
+ * split into the datacenter/machine ID fields the Snowflake layout expects.
+ */
+@Component
+public class RedisNodeInfoProvider implements NodeInfoProvider {
+
+    private final long datacenterId;
+    private final long machineId;
+
+    public RedisNodeInfoProvider(WorkerIdLeaseAllocator workerIdLeaseAllocator) {
+        long workerId = workerIdLeaseAllocator.getWorkerId();
+        this.datacenterId = workerId >> MACHINE_ID_BITS;
+        this.machineId = workerId & 0x1F;
+    }
+
+    @Override
+    public long getDatacenterId() {
+        return datacenterId;
+    }
+
+    @Override
+    public long getMachineId() {
+        return machineId;
+    }
+}

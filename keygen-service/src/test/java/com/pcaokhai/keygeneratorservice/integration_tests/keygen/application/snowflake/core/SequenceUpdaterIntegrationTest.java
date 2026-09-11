@@ -1,6 +1,7 @@
 package com.pcaokhai.keygeneratorservice.integration_tests.keygen.application.snowflake.core;
 
 import com.pcaokhai.keygeneratorservice.keygen.application.snowflake.core.SequenceUpdater;
+import com.pcaokhai.keygeneratorservice.keygen.application.snowflake.infra.network.WorkerIdLeaseAllocator;
 import com.pcaokhai.keygeneratorservice.keygen.application.snowflake.infra.time.TimeStampProvider;
 import com.pcaokhai.keygeneratorservice.keygen.application.snowflake.utils.SnowflakeConstants;
 import org.junit.jupiter.api.BeforeEach;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -16,6 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest
 @ActiveProfiles("test")
 public class SequenceUpdaterIntegrationTest {
+    @MockitoBean
+    private WorkerIdLeaseAllocator workerIdLeaseAllocator;
+
     @Autowired
     private SequenceUpdater sequenceUpdater;
 

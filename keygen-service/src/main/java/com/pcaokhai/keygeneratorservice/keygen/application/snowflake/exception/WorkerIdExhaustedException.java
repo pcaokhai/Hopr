@@ -13,12 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.pcaokhai.keygeneratorservice.keygen.application.snowflake.infra.network;
+package com.pcaokhai.keygeneratorservice.keygen.application.snowflake.exception;
 
-import java.net.NetworkInterface;
-import java.net.SocketException;
-import java.util.Enumeration;
-
-public interface NetworkInterfaceProvider {
-    Enumeration<NetworkInterface> getNetworkInterfaces() throws SocketException;
+public class WorkerIdExhaustedException extends RuntimeException {
+    public WorkerIdExhaustedException(String message) {
+        super(message);
+    }
 }
