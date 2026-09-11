@@ -16,10 +16,11 @@ All services run inside a dedicated Docker bridge network (`hopr_default`):
 | **`shortener-service`** | `hopr-shortener-service` | `8080:8080` | Handles URL shortening requests, persists to MongoDB, caches in Redis, interacts with KeyGen. |
 | **`resolver-service`** | `hopr-resolver-service` | `8083:8083` | Resolves short keys, checks Redis cache (falls back to Mongo), returns HTTP 307 redirect. |
 | **`mongodb`** | `hopr-mongodb` | `27017:27017` | MongoDB 7.0 (database: `Hopr`, user: `root`, password: `password`). Persistent storage for URL mappings. |
+| **`scylla-node-1` .. `3`** | `hopr-scylla-node-1..3` | `9042..9044:9042` | 3-node ScyllaDB cluster (keyspace `hopr`, RF 3). Schema applied by `db-migration`; not yet consumed by any service. |
 | **`redis-node-1` .. `6`** | `hopr-redis-node-1..6` | `7001..7006:6379` | 6-node Redis Cluster (3 masters, 3 replicas) for distributed caching. |
 | **`redis-cluster-init`** | `hopr-redis-cluster-init` | - | One-shot initialization container to cluster the 6 Redis nodes on startup. |
 
-Persistent data for MongoDB and all 6 Redis nodes is bind-mounted to the `./data/` directory at the project root.
+Persistent data for MongoDB, the 3 ScyllaDB nodes and all 6 Redis nodes is bind-mounted to the `./data/` directory at the project root.
 
 ---
 
@@ -172,6 +173,23 @@ curl -v http://hopr.localhost/my-hopr-repo
 
 **Browser Verification:**
 Paste `http://hopr.localhost/my-hopr-repo` into your web browser address bar. The browser should immediately redirect you to `https://github.com/pcaokhai/Hopr`.
+
+---
+
+### Test 5a: Verify ScyllaDB Schema
+
+The ScyllaDB cluster runs alongside MongoDB but does not serve any service yet. Apply the
+Flyway migrations and inspect the result:
+
+```bash
+docker compose up -d scylla-node-1 scylla-node-2 scylla-node-3
+./gradlew :db-migration:migrateScylla
+docker exec hopr-scylla-node-1 cqlsh -e "DESCRIBE KEYSPACE hopr"
+docker exec hopr-scylla-node-1 cqlsh -e \
+  "SELECT version, description, success FROM hopr.flyway_schema_history"
+```
+
+See `db-migration/README.md` for details.
 
 ---
 

@@ -167,6 +167,88 @@ services:
     networks:
       - default
 
+  # -------------------- ScyllaDB Cluster (3 Nodes) --------------------
+  # Stood up alongside MongoDB; not yet wired into the services (schema-only PR).
+  # Node 1 is the seed; nodes 2 and 3 join it. --smp/--memory keep three nodes
+  # comfortable on a laptop; production sizing is handled by the k8s chart.
+  # --reactor-backend=epoll: Seastar's default linux-aio backend reserves a chunk of
+  # the host's fs.aio-max-nr per shard, and three nodes on a Docker Desktop VM
+  # exhaust it (third node aborts with "Could not setup Async I/O"). epoll needs no
+  # aio slots. Dev-only; a real deployment uses the aio backend on a tuned host.
+  scylla-node-1:
+    image: scylladb/scylla:6.2
+    container_name: hopr-scylla-node-1
+    command: >
+      --seeds=scylla-node-1
+      --smp 1
+      --memory 1G
+      --overprovisioned 1
+      --developer-mode 1
+      --reactor-backend=epoll
+    volumes:
+      - ./data/scylla-1:/var/lib/scylla
+    ports:
+      - "9042:9042"
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'SELECT now() FROM system.local' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    networks:
+      - default
+
+  scylla-node-2:
+    image: scylladb/scylla:6.2
+    container_name: hopr-scylla-node-2
+    command: >
+      --seeds=scylla-node-1
+      --smp 1
+      --memory 1G
+      --overprovisioned 1
+      --developer-mode 1
+      --reactor-backend=epoll
+    volumes:
+      - ./data/scylla-2:/var/lib/scylla
+    ports:
+      - "9043:9042"
+    depends_on:
+      - scylla-node-1
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'SELECT now() FROM system.local' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    networks:
+      - default
+
+  scylla-node-3:
+    image: scylladb/scylla:6.2
+    container_name: hopr-scylla-node-3
+    command: >
+      --seeds=scylla-node-1
+      --smp 1
+      --memory 1G
+      --overprovisioned 1
+      --developer-mode 1
+      --reactor-backend=epoll
+    volumes:
+      - ./data/scylla-3:/var/lib/scylla
+    ports:
+      - "9044:9042"
+    depends_on:
+      - scylla-node-1
+      - scylla-node-2
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'SELECT now() FROM system.local' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    networks:
+      - default
+
   # -------------------- Spring Boot Microservices --------------------
   config-server:
     build:

@@ -10,6 +10,15 @@ mongodb:
   rootPassword: password
   database: Hopr
 
+scylladb:
+  image: scylladb/scylla:6.2
+  # Three replicas so replication_factor 3 (see db-migration V1) has three homes.
+  replicas: 3
+  smp: 1
+  memory: 1G
+  storage: 5Gi
+  keyspace: hopr
+
 redis:
   # Must match the release name used for `helm install <name> bitnami/redis-cluster`
   releaseName: hopr-redis
