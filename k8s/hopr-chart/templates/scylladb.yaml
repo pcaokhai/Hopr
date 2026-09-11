@@ -1,0 +1,83 @@
+# ScyllaDB as a StatefulSet, not a Deployment: each node owns a slice of the token
+# ring plus its own data volume, so pods need stable identities (hopr-scylladb-0..2)
+# and stable storage. The headless Service gives every pod a resolvable DNS name,
+# which is how nodes gossip and how the seed is addressed.
+#
+# Stood up alongside MongoDB; no service consumes it yet (schema-and-infra PR).
+apiVersion: v1
+kind: Service
+metadata:
+  name: hopr-scylladb
+  namespace: {{ .Values.namespace }}
+spec:
+  clusterIP: None
+  selector:
+    app: hopr-scylladb
+  ports:
+    - name: cql
+      port: 9042
+      targetPort: 9042
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: hopr-scylladb
+  namespace: {{ .Values.namespace }}
+spec:
+  serviceName: hopr-scylladb
+  replicas: {{ .Values.scylladb.replicas }}
+  selector:
+    matchLabels:
+      app: hopr-scylladb
+  template:
+    metadata:
+      labels:
+        app: hopr-scylladb
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: scylladb
+          image: {{ .Values.scylladb.image }}
+          args:
+            - "--seeds=hopr-scylladb-0.hopr-scylladb.{{ .Values.namespace }}.svc.cluster.local"
+            - "--smp"
+            - {{ .Values.scylladb.smp | quote }}
+            - "--memory"
+            - {{ .Values.scylladb.memory | quote }}
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          resources:
+            requests:
+              cpu: {{ .Values.scylladb.smp | quote }}
+              memory: {{ .Values.scylladb.memoryLimit | quote }}
+            limits:
+              cpu: {{ .Values.scylladb.smp | quote }}
+              memory: {{ .Values.scylladb.memoryLimit | quote }}
+          ports:
+            - name: cql
+              containerPort: 9042
+            - name: intra-node
+              containerPort: 7000
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "nodetool status | grep -qE \"^UN[[:space:]]+$POD_IP[[:space:]]\""]
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 80
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/scylla
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.scylladb.storageClassName }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.scylladb.storage }}
