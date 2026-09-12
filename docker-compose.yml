@@ -13,21 +13,6 @@ services:
     networks:
       - default
 
-  # -------------------- Local MongoDB --------------------
-  mongodb:
-    image: mongo:7.0
-    container_name: hopr-mongodb
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: password
-      MONGO_INITDB_DATABASE: Hopr
-    ports:
-      - "27017:27017"
-    volumes:
-      - ./data/mongodb:/data/db
-    networks:
-      - default
-
   # -------------------- Redis Cluster (6 Nodes) --------------------
   redis-node-1:
     image: redis:latest
@@ -168,7 +153,6 @@ services:
       - default
 
   # -------------------- ScyllaDB Cluster (3 Nodes) --------------------
-  # Stood up alongside MongoDB; not yet wired into the services (schema-only PR).
   # Node 1 is the seed; nodes 2 and 3 join it. --smp/--memory keep three nodes
   # comfortable on a laptop; production sizing is handled by the k8s chart.
   # --reactor-backend=epoll: Seastar's default linux-aio backend reserves a chunk of
@@ -297,8 +281,8 @@ services:
     depends_on:
       - config-server
       - keygen-service
-      - mongodb
       - redis-cluster-init
+      - scylla-node-1
     networks:
       - default
 
@@ -316,8 +300,8 @@ services:
       - "8083:8083"
     depends_on:
       - config-server
-      - mongodb
       - redis-cluster-init
+      - scylla-node-1
     networks:
       - default
 

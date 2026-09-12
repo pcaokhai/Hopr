@@ -16,14 +16,19 @@
 package com.pcaokhai.common.url.repository;
 
 import com.pcaokhai.common.url.model.UrlMapping;
-import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.cassandra.repository.CassandraRepository;
 import org.springframework.stereotype.Repository;
 
 /**
- * Repository interface for managing URL mappings in MongoDB.
- * This interface extends MongoRepository to provide CRUD operations for UrlMapping entities.
+ * Repository interface for managing URL mappings in ScyllaDB (CQL).
+ * This interface extends CassandraRepository to provide CRUD operations for UrlMapping entities.
  *
+ * <p>{@code save} maps to a plain CQL {@code INSERT}, which in Cassandra/Scylla is an
+ * upsert: writing an existing partition key overwrites the row rather than failing. The
+ * check-then-save alias flow therefore still has the same race it had on MongoDB; closing
+ * it needs a lightweight transaction ({@code INSERT ... IF NOT EXISTS}), which is a
+ * follow-up change.
  */
 @Repository
-public interface UrlRepository extends MongoRepository<UrlMapping, String> {
+public interface UrlRepository extends CassandraRepository<UrlMapping, String> {
 }

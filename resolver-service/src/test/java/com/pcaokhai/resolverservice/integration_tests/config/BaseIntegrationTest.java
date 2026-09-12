@@ -1,4 +1,4 @@
-package com.pcaokhai.urlshortenerservice.integration_tests.urlshort.config;
+package com.pcaokhai.resolverservice.integration_tests.config;
 
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;

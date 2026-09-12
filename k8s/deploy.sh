@@ -13,9 +13,8 @@ kubectl create namespace hopr --dry-run=client -o yaml | kubectl apply -f -
 helm repo add bitnami https://charts.bitnami.com/bitnami >/dev/null 2>&1 || true
 helm repo update
 
-# Bitnami's free-tier images are amd64-only for mongodb, so MongoDB uses the
-# plain official image instead (same as docker-compose.yml). Redis Cluster's
-# Bitnami image is multi-arch and works fine.
+# Redis Cluster's Bitnami image is multi-arch and works fine; ScyllaDB is
+# deployed by this repo's own chart (see k8s/hopr-chart/templates/scylladb.yaml).
 helm upgrade --install hopr-redis bitnami/redis-cluster \
   --namespace hopr \
   --set cluster.nodes=6 \

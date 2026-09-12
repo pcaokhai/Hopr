@@ -4,14 +4,14 @@ image:
   tag: local
   pullPolicy: Never
 
-mongodb:
-  image: mongo:7.0
-  rootUsername: root
-  rootPassword: password
-  database: Hopr
-
 scylladb:
   image: scylladb/scylla:6.2
+  port: "9042"
+  # Keyspace created by db-migration's V1 migration.
+  keyspace: hopr
+  # Scylla's default snitch reports a single datacenter under this name; the driver
+  # requires it explicitly so it can route requests to local-DC replicas.
+  datacenter: datacenter1
   # Three replicas so replication_factor 3 (see db-migration V1) has three homes.
   replicas: 3
   smp: 1

@@ -15,9 +15,10 @@
  */
 package com.pcaokhai.common.url.model;
 
-import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.PersistenceCreator;
-import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.cassandra.core.mapping.Column;
+import org.springframework.data.cassandra.core.mapping.PrimaryKey;
+import org.springframework.data.cassandra.core.mapping.Table;
 
 import java.io.Serializable;
 import java.util.Objects;
@@ -28,12 +29,19 @@ import java.util.Objects;
  * along with an optional alias for the URL.
  *
  */
-@Document(collection = "urls")
+@Table("urls")
 public class UrlMapping implements Serializable {
 
-    @Id
+    // Column names are spelled out because the CQL table (db-migration V2) uses
+    // snake_case, while Spring Data Cassandra would otherwise derive `shortkey`
+    // and `longurl` from the property names.
+    @PrimaryKey("short_key")
     private String shortKey;
+
+    @Column("long_url")
     private String longUrl;
+
+    @Column("alias")
     private String alias;
 
     public UrlMapping() {}

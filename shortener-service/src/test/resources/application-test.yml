@@ -9,13 +9,12 @@ spring:
       enabled: false
   config:
     import: ""
-  mongodb:
-    host: localhost
-    port: 27017
-    uri: mongodb://localhost:27017/shortener-test
-    username: root
-    password: test
-    database: shortener-test
+  cassandra:
+    contact-points: 127.0.0.1
+    port: 9042
+    keyspace-name: hopr
+    local-datacenter: datacenter1
+    schema-action: none
 
   data:
     redis:

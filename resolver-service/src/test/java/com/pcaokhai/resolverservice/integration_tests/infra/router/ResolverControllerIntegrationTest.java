@@ -1,6 +1,7 @@
 package com.pcaokhai.resolverservice.integration_tests.infra.router;
 
 import com.pcaokhai.resolverservice.exception.KeyNotFoundException;
+import com.pcaokhai.resolverservice.integration_tests.config.BaseIntegrationTest;
 import com.pcaokhai.resolverservice.infra.router.ResolverController;
 import com.pcaokhai.resolverservice.resolver.application.ResolverUseCase;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class ResolverControllerIntegrationTest {
+class ResolverControllerIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
