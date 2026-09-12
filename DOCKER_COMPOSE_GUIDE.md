@@ -15,7 +15,7 @@ All services run inside a dedicated Docker bridge network (`hopr_default`):
 | **`keygen-service`** | `hopr-keygen-service` | `8081:8081` | Generates unique random keys for shortened URLs. |
 | **`shortener-service`** | `hopr-shortener-service` | `8080:8080` | Handles URL shortening requests, persists to ScyllaDB, caches in Redis, interacts with KeyGen. |
 | **`resolver-service`** | `hopr-resolver-service` | `8083:8083` | Resolves short keys, checks Redis cache (falls back to ScyllaDB), returns HTTP 307 redirect. |
-| **`scylla-node-1` .. `3`** | `hopr-scylla-node-1..3` | `9042..9044:9042` | 3-node ScyllaDB cluster (keyspace `hopr`, RF 3). Schema applied by `db-migration`; not yet consumed by any service. |
+| **`scylla-node-1` .. `3`** | `hopr-scylla-node-1..3` | `9042..9044:9042` | 3-node ScyllaDB cluster (keyspace `hopr`, RF 3, schema applied by `db-migration`) — the persistence store behind `shortener-service` and `resolver-service`. |
 | **`redis-node-1` .. `6`** | `hopr-redis-node-1..6` | `7001..7006:6379` | 6-node Redis Cluster (3 masters, 3 replicas) for distributed caching. |
 | **`redis-cluster-init`** | `hopr-redis-cluster-init` | - | One-shot initialization container to cluster the 6 Redis nodes on startup. |
 
@@ -212,15 +212,12 @@ docker exec hopr-scylla-node-1 cqlsh -e "SELECT short_key, long_url, alias FROM 
 ```
 
 **Sample Output:**
-```javascript
-[
-  {
-    _id: 'my-hopr-repo',
-    longUrl: 'https://github.com/pcaokhai/Hopr',
-    alias: 'my-hopr-repo',
-    _class: 'com.pcaokhai.common.url.model.UrlMapping'
-  }
-]
+```text
+ short_key    | long_url                          | alias
+--------------+-----------------------------------+--------------
+ my-hopr-repo | https://github.com/pcaokhai/Hopr | my-hopr-repo
+
+(1 rows)
 ```
 
 ---

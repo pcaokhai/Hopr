@@ -35,10 +35,13 @@ kubectl wait --namespace ingress-nginx \
 
 ./k8s/build-and-load.sh
 
-# shortener/resolver open a CqlSession against keyspace hopr at boot, so the schema
-# has to exist before their Deployments do: install everything else first, migrate
-# through a port-forward to the seed node, then enable the two URL services.
-helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr --set urlServices.enabled=false
+# shortener/resolver open a CqlSession against keyspace hopr at boot, so on a fresh
+# install the schema has to exist before their Deployments do: install everything
+# else first, migrate through a port-forward to the seed node, then enable the two
+# URL services. On a re-run the release already exists and they are left running.
+if ! helm status hopr --namespace hopr >/dev/null 2>&1; then
+  helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr --set urlServices.enabled=false
+fi
 
 kubectl rollout status statefulset/hopr-scylladb -n hopr --timeout=600s
 kubectl port-forward -n hopr hopr-scylladb-0 9042:9042 >/dev/null 2>&1 &
