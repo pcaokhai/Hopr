@@ -37,6 +37,17 @@ kubectl wait --namespace ingress-nginx \
 
 helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr
 
+# shortener/resolver open a CqlSession against keyspace hopr at boot, so the schema
+# has to exist before their pods can pass startup. Migrate through a port-forward to
+# the seed node once the StatefulSet is ready.
+kubectl rollout status statefulset/hopr-scylladb -n hopr --timeout=600s
+kubectl port-forward -n hopr hopr-scylladb-0 9042:9042 >/dev/null 2>&1 &
+PF_PID=$!
+trap 'kill "$PF_PID" 2>/dev/null || true' EXIT
+sleep 3
+./gradlew :db-migration:migrateScylla -Pscylla.contactPoint=127.0.0.1:9042
+kill "$PF_PID"; trap - EXIT
+
 kubectl rollout status deployment/config-server -n hopr --timeout=120s
 kubectl rollout status deployment/keygen-service -n hopr --timeout=120s
 kubectl rollout status deployment/shortener-service -n hopr --timeout=120s

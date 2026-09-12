@@ -8,7 +8,6 @@ dependencies {
     implementation("org.springframework.retry:spring-retry")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.testcontainers:testcontainers-cassandra")
-    testImplementation("org.testcontainers:testcontainers-junit-jupiter")
 }
 
 tasks.named<Test>("test") {

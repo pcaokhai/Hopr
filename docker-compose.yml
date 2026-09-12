@@ -279,10 +279,14 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - config-server
-      - keygen-service
-      - redis-cluster-init
-      - scylla-node-1
+      config-server:
+        condition: service_started
+      keygen-service:
+        condition: service_started
+      redis-cluster-init:
+        condition: service_started
+      scylla-node-1:
+        condition: service_healthy
     networks:
       - default
 
@@ -299,9 +303,12 @@ services:
     ports:
       - "8083:8083"
     depends_on:
-      - config-server
-      - redis-cluster-init
-      - scylla-node-1
+      config-server:
+        condition: service_started
+      redis-cluster-init:
+        condition: service_started
+      scylla-node-1:
+        condition: service_healthy
     networks:
       - default
 

@@ -59,9 +59,19 @@ Ensure the ports and credentials match your intended local setup.
 
 ---
 
-### Step 3: Start the Stack with Docker Compose
+### Step 3: Start ScyllaDB and Apply the Schema
 
-Run the following command in the project root:
+`shortener-service` and `resolver-service` open a session against the `hopr` keyspace at
+boot and fail to start if it does not exist, so the schema must be applied before they come up:
+
+```bash
+docker compose up -d scylla-node-1 scylla-node-2 scylla-node-3
+./gradlew :db-migration:migrateScylla
+```
+
+See `db-migration/README.md` for details.
+
+### Step 4: Start the Rest of the Stack
 
 ```bash
 docker compose up -d --build
@@ -69,13 +79,13 @@ docker compose up -d --build
 
 This command will:
 1. Build local Docker images for `config-server`, `keygen-service`, `shortener-service`, and `resolver-service`.
-2. Start the 3 `scylla-node` containers and the 6 `redis-node` containers.
+2. Start the 6 `redis-node` containers (the `scylla-node` containers are already up).
 3. Trigger `redis-cluster-init` to assemble the cluster.
-4. Launch `api-gateway` and all backend microservices with proper dependency ordering.
+4. Launch `api-gateway` and all backend microservices once `scylla-node-1` reports healthy.
 
 ---
 
-### Step 4: Verify Container Status
+### Step 5: Verify Container Status
 
 Wait 15–20 seconds for the Spring Boot applications to initialize, then inspect container status:
 
@@ -180,12 +190,10 @@ Paste `http://hopr.localhost/my-hopr-repo` into your web browser address bar. Th
 
 ### Test 5a: Verify ScyllaDB Schema
 
-The shortener and resolver services read and write the `hopr` keyspace. Apply the
-Flyway migrations and inspect the result:
+The shortener and resolver services read and write the `hopr` keyspace. Inspect the
+schema applied in Step 3:
 
 ```bash
-docker compose up -d scylla-node-1 scylla-node-2 scylla-node-3
-./gradlew :db-migration:migrateScylla
 docker exec hopr-scylla-node-1 cqlsh -e "DESCRIBE KEYSPACE hopr"
 docker exec hopr-scylla-node-1 cqlsh -e \
   "SELECT version, description, success FROM hopr.flyway_schema_history"
