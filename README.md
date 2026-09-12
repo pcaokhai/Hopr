@@ -139,7 +139,7 @@ sequenceDiagram
 | **`config-server`** | Spring Cloud Config | `8888` | Centralized external configuration repository for all microservices. |
 | **`common`** | Java Library (JAR) | — | Shared domain entities (`UrlMapping`), DTOs, and exception models. |
 | **`db-migration`** | Flyway / CQL | — | Versioned ScyllaDB schema migrations — see `db-migration/README.md`. |
-| **`scylla-node-1` .. `3`** | ScyllaDB 6.2 | `9042-9044` | 3-node wide-column cluster (keyspace `hopr`, RF 3). Schema only; no service reads it yet. |
+| **`scylla-node-1` .. `3`** | ScyllaDB 6.2 | `9042-9044` | 3-node wide-column cluster (keyspace `hopr`, RF 3) — the persistence store behind `shortener-service` and `resolver-service`. |
 | **`redis-cluster`** | Redis 7.x (6 Nodes) | `7001-7006` | Distributed, sharded cache layer (3 master nodes, 3 replica nodes). |
 
 ---
@@ -189,22 +189,30 @@ cd Hopr
 ./gradlew bootJar -x test
 ```
 
-#### Step 2: Launch the Infrastructure & Microservices
+#### Step 2: Start ScyllaDB & Apply the Schema
 
-Run Docker Compose in detached mode:
+`shortener-service` and `resolver-service` connect to the `hopr` keyspace at boot, so the
+schema must exist before they start:
+
+```bash
+docker compose up -d scylla-node-1 scylla-node-2 scylla-node-3
+./gradlew :db-migration:migrateScylla
+```
+
+#### Step 3: Launch the Rest of the Infrastructure & Microservices
 
 ```bash
 docker compose up -d --build
 ```
 
 This command will:
-1. Initialize the **3-node ScyllaDB** cluster and its data volumes (schema applied separately — see `db-migration/README.md`).
+1. Reuse the already-running **3-node ScyllaDB** cluster.
 2. Spin up **6 Redis nodes** and execute the one-shot `redis-cluster-init` container to form the cluster.
 3. Start the **Config Server** and wait for it to be ready.
 4. Launch **`keygen-service`**, **`shortener-service`**, and **`resolver-service`**.
 5. Launch the **`api-gateway`** reverse proxy on port `80`.
 
-#### Step 3: Verify Container Health
+#### Step 4: Verify Container Health
 
 Check that all containers are healthy and running:
 

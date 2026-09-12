@@ -36,6 +36,11 @@ redis:
   timeout: "6000"
   nodeCount: 6
 
+urlServices:
+  # shortener-service and resolver-service open a CqlSession against keyspace hopr at
+  # boot, so deploy.sh installs the chart once with this off, migrates, then turns it on.
+  enabled: true
+
 config:
   shortenerServerPort: "8080"
   resolverServerPort: "8083"

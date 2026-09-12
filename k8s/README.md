@@ -158,14 +158,16 @@ This will, in order:
    become ready.
 5. Build all 4 app jars with Gradle, build their Docker images, and
    `kind load docker-image` them into the cluster (`k8s/build-and-load.sh`).
-6. `helm upgrade --install hopr ./k8s/hopr-chart` — deploys ScyllaDB, all 4
-   app services, and the `Ingress` resource.
+6. `helm upgrade --install hopr ./k8s/hopr-chart --set urlServices.enabled=false`
+   — deploys ScyllaDB, `config-server`, `keygen-service`, and the `Ingress`
+   resource, but not yet `shortener-service`/`resolver-service`.
 7. Wait for the ScyllaDB StatefulSet to become ready, then apply the Flyway
    schema through a `kubectl port-forward` to `hopr-scylladb-0`
    (`./gradlew :db-migration:migrateScylla -Pscylla.contactPoint=127.0.0.1:9042`).
    `shortener-service` and `resolver-service` open a session against the `hopr`
-   keyspace at boot, so their pods crash-loop until this step has run.
-8. Wait for every Deployment's rollout to finish.
+   keyspace at boot, which is why they are not created until this has run.
+8. `helm upgrade --install hopr ./k8s/hopr-chart` — adds the two URL services.
+9. Wait for every Deployment's rollout to finish.
 
 The script uses `set -euo pipefail` and is **idempotent** — re-running it on
 an already-deployed cluster is safe (`helm upgrade --install` and
