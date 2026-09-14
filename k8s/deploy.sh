@@ -52,7 +52,7 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 ./gradlew :db-migration:migrateScylla -Pscylla.contactPoint=127.0.0.1:9042
-kill "$PF_PID"; trap - EXIT
+kill "$PF_PID" 2>/dev/null || true; trap - EXIT
 
 helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr
 
