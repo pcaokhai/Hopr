@@ -7,7 +7,7 @@ data:
   {{- range $i := until (int .Values.redis.nodeCount) }}
   REDIS_NODE_{{ add $i 1 }}: "{{ $.Values.redis.releaseName }}-redis-cluster-{{ $i }}.{{ $.Values.redis.releaseName }}-redis-cluster-headless:6379"
   {{- end }}
-  SCYLLA_CONTACT_POINTS: "hopr-scylladb-0.hopr-scylladb,hopr-scylladb-1.hopr-scylladb,hopr-scylladb-2.hopr-scylladb"
+  SCYLLA_CONTACT_POINTS: "{{ range $i := until (int .Values.scylladb.replicas) }}{{ if $i }},{{ end }}hopr-scylladb-{{ $i }}.hopr-scylladb{{ end }}"
   SCYLLA_PORT: {{ .Values.scylladb.port | quote }}
   SCYLLA_KEYSPACE: {{ .Values.scylladb.keyspace | quote }}
   SCYLLA_DATACENTER: {{ .Values.scylladb.datacenter | quote }}
