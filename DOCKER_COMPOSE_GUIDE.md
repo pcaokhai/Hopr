@@ -1,6 +1,6 @@
 # Hopr: Docker Compose Setup & Testing Guide
 
-This guide provides step-by-step instructions to build, run, and test the entire Hopr URL shortener ecosystem (including Config Server, API Gateway, Microservices, MongoDB, and Redis Cluster) using **Docker Compose** in a local environment.
+This guide provides step-by-step instructions to build, run, and test the entire Hopr URL shortener ecosystem (including Config Server, API Gateway, Microservices, ScyllaDB, and Redis Cluster) using **Docker Compose** in a local environment.
 
 ---
 
@@ -13,14 +13,13 @@ All services run inside a dedicated Docker bridge network (`hopr_default`):
 | **`api-gateway`** | `hopr-api-gateway` | `80:80` | Nginx reverse proxy routing `/shorten` to `shortener-service` and `/{alias}` to `resolver-service`. Rate limited (5 req/s, burst 10). |
 | **`config-server`** | `hopr-config-server` | - | Spring Cloud Config Server serving centralized configuration to the microservices (internal only, no host port published). |
 | **`keygen-service`** | `hopr-keygen-service` | `8081:8081` | Generates unique random keys for shortened URLs. |
-| **`shortener-service`** | `hopr-shortener-service` | `8080:8080` | Handles URL shortening requests, persists to MongoDB, caches in Redis, interacts with KeyGen. |
-| **`resolver-service`** | `hopr-resolver-service` | `8083:8083` | Resolves short keys, checks Redis cache (falls back to Mongo), returns HTTP 307 redirect. |
-| **`mongodb`** | `hopr-mongodb` | `27017:27017` | MongoDB 7.0 (database: `Hopr`, user: `root`, password: `password`). Persistent storage for URL mappings. |
-| **`scylla-node-1` .. `3`** | `hopr-scylla-node-1..3` | `9042..9044:9042` | 3-node ScyllaDB cluster (keyspace `hopr`, RF 3). Schema applied by `db-migration`; not yet consumed by any service. |
+| **`shortener-service`** | `hopr-shortener-service` | `8080:8080` | Handles URL shortening requests, persists to ScyllaDB, caches in Redis, interacts with KeyGen. |
+| **`resolver-service`** | `hopr-resolver-service` | `8083:8083` | Resolves short keys, checks Redis cache (falls back to ScyllaDB), returns HTTP 307 redirect. |
+| **`scylla-node-1` .. `3`** | `hopr-scylla-node-1..3` | `9042..9044:9042` | 3-node ScyllaDB cluster (keyspace `hopr`, RF 3, schema applied by `db-migration`) — the persistence store behind `shortener-service` and `resolver-service`. |
 | **`redis-node-1` .. `6`** | `hopr-redis-node-1..6` | `7001..7006:6379` | 6-node Redis Cluster (3 masters, 3 replicas) for distributed caching. |
 | **`redis-cluster-init`** | `hopr-redis-cluster-init` | - | One-shot initialization container to cluster the 6 Redis nodes on startup. |
 
-Persistent data for MongoDB, the 3 ScyllaDB nodes and all 6 Redis nodes is bind-mounted to the `./data/` directory at the project root.
+Persistent data for the 3 ScyllaDB nodes and all 6 Redis nodes is bind-mounted to the `./data/` directory at the project root.
 
 ---
 
@@ -49,7 +48,10 @@ Because the Dockerfiles copy JARs directly from each service's `build/libs/` dir
 ### Step 2: Verify Configuration (`.env`)
 
 The `.env` file at the root contains pre-configured settings for local containerized communication:
-- `MONGO_URI=mongodb://root:password@mongodb:27017/Hopr?authSource=admin`
+- `SCYLLA_CONTACT_POINTS=scylla-node-1:9042,scylla-node-2:9042,scylla-node-3:9042`
+- `SCYLLA_PORT=9042`
+- `SCYLLA_KEYSPACE=hopr`
+- `SCYLLA_DATACENTER=datacenter1`
 - `REDIS_NODE_1=redis-node-1:6379` ... `REDIS_NODE_6=redis-node-6:6379`
 - `SHORTENER_DOMAIN=http://hopr.localhost/`
 
@@ -57,9 +59,19 @@ Ensure the ports and credentials match your intended local setup.
 
 ---
 
-### Step 3: Start the Stack with Docker Compose
+### Step 3: Start ScyllaDB and Apply the Schema
 
-Run the following command in the project root:
+`shortener-service` and `resolver-service` open a session against the `hopr` keyspace at
+boot and fail to start if it does not exist, so the schema must be applied before they come up:
+
+```bash
+docker compose up -d scylla-node-1 scylla-node-2 scylla-node-3
+./gradlew :db-migration:migrateScylla
+```
+
+See `db-migration/README.md` for details.
+
+### Step 4: Start the Rest of the Stack
 
 ```bash
 docker compose up -d --build
@@ -67,13 +79,13 @@ docker compose up -d --build
 
 This command will:
 1. Build local Docker images for `config-server`, `keygen-service`, `shortener-service`, and `resolver-service`.
-2. Start `mongodb` and the 6 `redis-node` containers.
+2. Start the 6 `redis-node` containers (the `scylla-node` containers are already up).
 3. Trigger `redis-cluster-init` to assemble the cluster.
-4. Launch `api-gateway` and all backend microservices with proper dependency ordering.
+4. Launch `api-gateway` and all backend microservices once `scylla-node-1` reports healthy.
 
 ---
 
-### Step 4: Verify Container Status
+### Step 5: Verify Container Status
 
 Wait 15–20 seconds for the Spring Boot applications to initialize, then inspect container status:
 
@@ -178,12 +190,10 @@ Paste `http://hopr.localhost/my-hopr-repo` into your web browser address bar. Th
 
 ### Test 5a: Verify ScyllaDB Schema
 
-The ScyllaDB cluster runs alongside MongoDB but does not serve any service yet. Apply the
-Flyway migrations and inspect the result:
+The shortener and resolver services read and write the `hopr` keyspace. Inspect the
+schema applied in Step 3:
 
 ```bash
-docker compose up -d scylla-node-1 scylla-node-2 scylla-node-3
-./gradlew :db-migration:migrateScylla
 docker exec hopr-scylla-node-1 cqlsh -e "DESCRIBE KEYSPACE hopr"
 docker exec hopr-scylla-node-1 cqlsh -e \
   "SELECT version, description, success FROM hopr.flyway_schema_history"
@@ -193,24 +203,21 @@ See `db-migration/README.md` for details.
 
 ---
 
-### Test 5: Verify MongoDB Storage
+### Test 5: Verify ScyllaDB Storage
 
-Inspect the stored records directly within the MongoDB database:
+Inspect the stored rows directly in the `hopr` keyspace:
 
 ```bash
-docker exec hopr-mongodb mongosh -u root -p password --eval 'db.getSiblingDB("Hopr").urls.find().toArray()'
+docker exec hopr-scylla-node-1 cqlsh -e "SELECT short_key, long_url, alias FROM hopr.urls"
 ```
 
 **Sample Output:**
-```javascript
-[
-  {
-    _id: 'my-hopr-repo',
-    longUrl: 'https://github.com/pcaokhai/Hopr',
-    alias: 'my-hopr-repo',
-    _class: 'com.pcaokhai.common.url.model.UrlMapping'
-  }
-]
+```text
+ short_key    | long_url                          | alias
+--------------+-----------------------------------+--------------
+ my-hopr-repo | https://github.com/pcaokhai/Hopr | my-hopr-repo
+
+(1 rows)
 ```
 
 ---
@@ -246,8 +253,8 @@ for i in {1..15}; do curl -s -o /dev/null -w "%{http_code}\n" http://hopr.localh
 | Issue | Root Cause | Solution |
 | :--- | :--- | :--- |
 | **`502 Bad Gateway`** on Nginx | Nginx cached an outdated internal IP for `shortener-service` after a container restart | Restart Nginx to force DNS re-resolution: `docker compose restart api-gateway`. |
-| **`500 Internal Server Error`** during URL resolution | Incorrect request body key (`url` instead of `longUrl`), which persisted a `null` destination URL | Always use `{"longUrl": "..."}`. Remove invalid records from MongoDB: `db.urls.deleteOne({longUrl: null})`. |
-| **`MongoTimeoutException`** on startup | Spring Boot 4 requires `spring.mongodb.uri` | Ensure `application.yml` contains both `spring.mongodb.uri` and `spring.data.mongodb.uri`. |
+| **`500 Internal Server Error`** during URL resolution | Incorrect request body key (`url` instead of `longUrl`), which persisted a `null` destination URL | Always use `{"longUrl": "..."}`. Remove invalid rows: `DELETE FROM hopr.urls WHERE short_key = '...'`. |
+| **`NoNodeAvailableException`** / `AllNodesFailedException` on startup | Scylla not yet up, or `spring.cassandra.local-datacenter` does not match the cluster | Wait for the `scylla-node-*` healthchecks, then confirm `SCYLLA_DATACENTER` matches `nodetool status`. |
 | **Redis cluster state error after restart** | Stale cluster state / metadata persisted in volume directory | Run `docker compose down -v` or clear files under `./data/redis-*/` before relaunching. |
 
 ---
@@ -262,5 +269,5 @@ for i in {1..15}; do curl -s -o /dev/null -w "%{http_code}\n" http://hopr.localh
 - **Stop and wipe all data volumes (clean state reset):**
   ```bash
   docker compose down -v
-  rm -rf ./data/mongodb/* ./data/redis-*/*
+  rm -rf ./data/scylla-*/* ./data/redis-*/*
   ```

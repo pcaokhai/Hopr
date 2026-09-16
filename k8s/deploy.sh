@@ -13,9 +13,8 @@ kubectl create namespace hopr --dry-run=client -o yaml | kubectl apply -f -
 helm repo add bitnami https://charts.bitnami.com/bitnami >/dev/null 2>&1 || true
 helm repo update
 
-# Bitnami's free-tier images are amd64-only for mongodb, so MongoDB uses the
-# plain official image instead (same as docker-compose.yml). Redis Cluster's
-# Bitnami image is multi-arch and works fine.
+# Redis Cluster's Bitnami image is multi-arch and works fine; ScyllaDB is
+# deployed by this repo's own chart (see k8s/hopr-chart/templates/scylladb.yaml).
 helm upgrade --install hopr-redis bitnami/redis-cluster \
   --namespace hopr \
   --set cluster.nodes=6 \
@@ -35,6 +34,25 @@ kubectl wait --namespace ingress-nginx \
   --timeout=180s
 
 ./k8s/build-and-load.sh
+
+# shortener/resolver open a CqlSession against keyspace hopr at boot, so on a fresh
+# install the schema has to exist before their Deployments do: install everything
+# else first, migrate through a port-forward to the seed node, then enable the two
+# URL services. On a re-run the release already exists and they are left running.
+if ! helm status hopr --namespace hopr >/dev/null 2>&1; then
+  helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr --set urlServices.enabled=false
+fi
+
+kubectl rollout status statefulset/hopr-scylladb -n hopr --timeout=600s
+kubectl port-forward -n hopr hopr-scylladb-0 9042:9042 >/dev/null 2>&1 &
+PF_PID=$!
+trap 'kill "$PF_PID" 2>/dev/null || true' EXIT
+for _ in $(seq 1 30); do
+  (exec 3<>/dev/tcp/127.0.0.1/9042) 2>/dev/null && break
+  sleep 1
+done
+./gradlew :db-migration:migrateScylla -Pscylla.contactPoint=127.0.0.1:9042
+kill "$PF_PID" 2>/dev/null || true; trap - EXIT
 
 helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr
 

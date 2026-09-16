@@ -11,8 +11,12 @@ management:
       show-details: always
 
 spring:
-  mongodb:
-    uri: ${MONGO_URI}
+  cassandra:
+    contact-points: ${SCYLLA_CONTACT_POINTS}
+    port: ${SCYLLA_PORT}
+    keyspace-name: ${SCYLLA_KEYSPACE}
+    local-datacenter: ${SCYLLA_DATACENTER}
+    schema-action: none
   data:
     redis:
       port: ${REDIS_PORT}

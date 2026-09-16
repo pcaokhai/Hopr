@@ -2,8 +2,6 @@
 # ring plus its own data volume, so pods need stable identities (hopr-scylladb-0..2)
 # and stable storage. The headless Service gives every pod a resolvable DNS name,
 # which is how nodes gossip and how the seed is addressed.
-#
-# Stood up alongside MongoDB; no service consumes it yet (schema-and-infra PR).
 apiVersion: v1
 kind: Service
 metadata:

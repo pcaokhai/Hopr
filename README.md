@@ -7,7 +7,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg?style=flat-square&logo=docker)](https://www.docker.com/)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-Helm%20%7C%20kind-326CE5.svg?style=flat-square&logo=kubernetes)](https://kubernetes.io/)
 [![Redis](https://img.shields.io/badge/Redis-6--Node%20Cluster-DC382D.svg?style=flat-square&logo=redis)](https://redis.io/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-7.0-47A248.svg?style=flat-square&logo=mongodb)](https://www.mongodb.com/)
+[![ScyllaDB](https://img.shields.io/badge/ScyllaDB-6.2-5DB3E0.svg?style=flat-square&logo=scylladb)](https://www.scylladb.com/)
 [![JaCoCo Coverage](https://img.shields.io/badge/Coverage-%E2%89%A5%2085%25-green.svg?style=flat-square&logo=codecov)](https://www.eclemma.org/jacoco/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
 
@@ -47,7 +47,7 @@ Designed with clean architecture and domain-driven principles, Hopr eliminates c
 ## Architectural Highlights
 
 - **Decentralized, Collision-Free Key Generation**: Uses a 64-bit Twitter Snowflake algorithm (timestamp + worker ID + sequence) coupled with Base62 encoding. Generates 7-character URL-safe slugs without database auto-increment locks or central coordination overhead.
-- **Sub-Millisecond Read Latency**: Read operations bypass database lookups via an in-memory Caffeine local cache backed by a distributed **6-node Redis Cluster** (3 masters + 3 replicas). MongoDB Atlas / Mongo 7.0 acts as durable cold storage.
+- **Sub-Millisecond Read Latency**: Read operations bypass database lookups via an in-memory Caffeine local cache backed by a distributed **6-node Redis Cluster** (3 masters + 3 replicas). A 3-node **ScyllaDB** cluster (RF 3) acts as durable cold storage.
 - **Lightweight Edge API Gateway**: Powered by Nginx on port `80`, handling North-South routing, CORS preflight (`OPTIONS`), and socket-level token bucket rate limiting (5 req/s, burst 10) with negligible memory footprint (~20MB RAM) and zero GC pauses.
 - **Cloud-Native Service Discovery**: Eliminates heavyweight JVM service registries (Netflix Eureka) in favor of container platform discovery (Docker Compose internal DNS and Kubernetes CoreDNS/kube-proxy).
 - **Centralized Spring Cloud Config Server**: Native repository-backed configuration server delivering environment-agnostic properties to all downstream microservices at startup.
@@ -78,9 +78,9 @@ flowchart TD
 
     subgraph "Data & Distributed Caching"
         Shortener -->|Write Mapping & Cache Prime| RedisCluster[("Redis Cluster (6 Nodes)\n3 Masters + 3 Replicas")]
-        Shortener -->|Persist URL Record| MongoDB[("MongoDB 7.0\nPersistent Storage")]
+        Shortener -->|Persist URL Record| Scylla[("ScyllaDB 6.2\n3 Nodes, RF 3")]
         Resolver -->|1. Fast Cache Read| RedisCluster
-        Resolver -.->|2. Cache-Miss Fallback| MongoDB
+        Resolver -.->|2. Cache-Miss Fallback| Scylla
     end
 ```
 
@@ -95,7 +95,7 @@ sequenceDiagram
     participant KS as keygen-service (:8081)
     participant RS as resolver-service (:8083)
     participant RC as Redis Cluster
-    participant DB as MongoDB
+    participant DB as ScyllaDB
 
     Note over User, GW: Flow 1: Create Short URL
     User->>GW: POST /shorten {"longUrl": "https://..."}
@@ -118,7 +118,7 @@ sequenceDiagram
     alt Cache Hit
         RC-->>RS: Return longUrl
     else Cache Miss
-        RS->>DB: Query MongoDB by key
+        RS->>DB: Query ScyllaDB by short_key
         DB-->>RS: Return UrlMapping
         RS->>RC: Repopulate cache
     end
@@ -133,14 +133,13 @@ sequenceDiagram
 | Service | Technology | Port | Description |
 | :--- | :--- | :--- | :--- |
 | **`api-gateway`** | Nginx | `80` | Edge reverse proxy, CORS preflight handler, and C-level rate limiter (5 req/s, burst 10). |
-| **`shortener-service`** | Spring Boot 4 / Java 25 | `8080` | URL shortening engine, alias validation, Redis cache priming, and MongoDB persistence. |
-| **`resolver-service`** | Spring Boot 4 / Java 25 | `8083` | High-performance resolution engine returning `HTTP 307 Temporary Redirect` via Redis Cluster & MongoDB. |
+| **`shortener-service`** | Spring Boot 4 / Java 25 | `8080` | URL shortening engine, alias validation, Redis cache priming, and ScyllaDB persistence. |
+| **`resolver-service`** | Spring Boot 4 / Java 25 | `8083` | High-performance resolution engine returning `HTTP 307 Temporary Redirect` via Redis Cluster & ScyllaDB. |
 | **`keygen-service`** | Spring Boot 4 / Java 25 | `8081` | Dedicated worker generating 64-bit Snowflake IDs encoded into Base62 URL slugs. |
 | **`config-server`** | Spring Cloud Config | `8888` | Centralized external configuration repository for all microservices. |
 | **`common`** | Java Library (JAR) | — | Shared domain entities (`UrlMapping`), DTOs, and exception models. |
 | **`db-migration`** | Flyway / CQL | — | Versioned ScyllaDB schema migrations — see `db-migration/README.md`. |
-| **`mongodb`** | MongoDB 7.0 | `27017` | Persistent document storage for URL mappings and metadata. |
-| **`scylla-node-1` .. `3`** | ScyllaDB 6.2 | `9042-9044` | 3-node wide-column cluster (keyspace `hopr`, RF 3). Schema only; no service reads it yet. |
+| **`scylla-node-1` .. `3`** | ScyllaDB 6.2 | `9042-9044` | 3-node wide-column cluster (keyspace `hopr`, RF 3) — the persistence store behind `shortener-service` and `resolver-service`. |
 | **`redis-cluster`** | Redis 7.x (6 Nodes) | `7001-7006` | Distributed, sharded cache layer (3 master nodes, 3 replica nodes). |
 
 ---
@@ -155,8 +154,7 @@ sequenceDiagram
 | **Edge Gateway** | Nginx | **Nginx Alpine**, non-blocking event-loop (`epoll`), `limit_req_zone` |
 | **Distributed Caching** | Redis | **6-node Redis Cluster** (sharded, master-replica replication) |
 | **Local In-Memory Cache** | Caffeine | In-process cache for ultra-hot path resolution |
-| **Persistence** | MongoDB | **MongoDB 7.0**, indexing on `alias` / `_id` |
-| **Wide-Column Store** | ScyllaDB | **ScyllaDB 6.2**, 3 nodes at RF 3, schema managed by Flyway CQL migrations |
+| **Persistence** | ScyllaDB | **ScyllaDB 6.2**, 3 nodes at RF 3, schema managed by Flyway CQL migrations |
 | **Key Generation Algorithm** | Snowflake + Base62 | 64-bit timestamp + worker ID + sequence with Base62 character mapping |
 | **API Documentation** | OpenAPI 3 | **springdoc-openapi 3.1.0** (Swagger UI on `/swagger-ui.html`) |
 | **Code Coverage** | JaCoCo | Enforced build verification (Bundle line coverage $\ge 85\%$) |
@@ -191,22 +189,30 @@ cd Hopr
 ./gradlew bootJar -x test
 ```
 
-#### Step 2: Launch the Infrastructure & Microservices
+#### Step 2: Start ScyllaDB & Apply the Schema
 
-Run Docker Compose in detached mode:
+`shortener-service` and `resolver-service` connect to the `hopr` keyspace at boot, so the
+schema must exist before they start:
+
+```bash
+docker compose up -d scylla-node-1 scylla-node-2 scylla-node-3
+./gradlew :db-migration:migrateScylla
+```
+
+#### Step 3: Launch the Rest of the Infrastructure & Microservices
 
 ```bash
 docker compose up -d --build
 ```
 
 This command will:
-1. Initialize the **MongoDB** instance and data volume, plus the **3-node ScyllaDB** cluster (schema applied separately — see `db-migration/README.md`).
+1. Reuse the already-running **3-node ScyllaDB** cluster.
 2. Spin up **6 Redis nodes** and execute the one-shot `redis-cluster-init` container to form the cluster.
 3. Start the **Config Server** and wait for it to be ready.
 4. Launch **`keygen-service`**, **`shortener-service`**, and **`resolver-service`**.
 5. Launch the **`api-gateway`** reverse proxy on port `80`.
 
-#### Step 3: Verify Container Health
+#### Step 4: Verify Container Health
 
 Check that all containers are healthy and running:
 
@@ -414,7 +420,10 @@ Key variables defined in `.env`:
 
 | Variable | Default Value | Description |
 | :--- | :--- | :--- |
-| `MONGO_URI` | `mongodb://root:password@mongodb:27017/Hopr?authSource=admin` | MongoDB connection string |
+| `SCYLLA_CONTACT_POINTS` | `scylla-node-1:9042,scylla-node-2:9042,scylla-node-3:9042` | Comma-separated CQL contact points |
+| `SCYLLA_PORT` | `9042` | CQL native transport port |
+| `SCYLLA_KEYSPACE` | `hopr` | Keyspace created by `db-migration` |
+| `SCYLLA_DATACENTER` | `datacenter1` | Driver's local datacenter, required for request routing |
 | `REDIS_NODE_1` ... `REDIS_NODE_6` | `redis-node-1:6379` ... `redis-node-6:6379` | Hostnames and ports for the 6 Redis Cluster nodes |
 | `SHORTENER_DOMAIN` | `http://hopr.localhost/` | Base domain prepended to generated short URLs |
 | `CONFIG_SERVER_URL` | `http://config-server:8888` | Upstream Config Server endpoint for service bootstrap |
@@ -432,7 +441,7 @@ Key variables defined in `.env`:
 - **Complete wipe and fresh restart (delete volumes and cached state):**
   ```bash
   docker compose down -v
-  rm -rf ./data/mongodb/* ./data/redis-*/*
+  rm -rf ./data/scylla-*/* ./data/redis-*/*
   ```
 
 ---

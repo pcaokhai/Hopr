@@ -18,7 +18,7 @@ kind cluster "hopr"
  └─ namespace: hopr
      ├─ Helm release "hopr-redis"  (bitnami/redis-cluster, 6 nodes)
      └─ Helm release "hopr"        (this repo's own chart: k8s/hopr-chart)
-         ├─ Deployment/Service: hopr-mongodb        (plain mongo:7.0 image)
+         ├─ StatefulSet/Service: hopr-scylladb       (scylladb/scylla:6.2, 3 nodes)
          ├─ Deployment/Service: config-server         (port 8888)
          ├─ Deployment/Service: keygen-service        (port 8081)
          ├─ Deployment/Service: shortener-service     (port 8080)
@@ -45,13 +45,13 @@ k8s/
   kind-config.yaml          kind cluster definition (1 node, port mapping)
   build-and-load.sh         builds jars + docker images, loads them into kind
   deploy.sh                 full deploy: cluster, Redis, app chart, rollout wait
-  hopr-chart/                Helm chart for MongoDB + all 4 app services + Ingress
+  hopr-chart/                Helm chart for ScyllaDB + all 4 app services + Ingress
     Chart.yaml
-    values.yaml              all tunable values (ports, image tag, mongo/redis config)
+    values.yaml              all tunable values (ports, image tag, scylla/redis config)
     templates/
       configmap.yaml          non-secret env vars (Redis nodes, ports...)
-      secret.yaml             MONGO_URI, REDIS_PASSWORD
-      mongodb.yaml            MongoDB Deployment + Service
+      secret.yaml             REDIS_PASSWORD
+      scylladb.yaml           ScyllaDB StatefulSet + headless Service
       config-server.yaml      Config Server Deployment + Service (port 8888)
       keygen-service.yaml     keygen-service Deployment + Service
       shortener-service.yaml  shortener-service Deployment + Service
@@ -60,31 +60,29 @@ k8s/
                               resolver-service via the ingress-nginx controller
 ```
 
-## Why Helm for the app layer, and why MongoDB isn't a Bitnami chart
+## Why Helm for the app layer, and why ScyllaDB isn't a Bitnami chart
 
 - **Redis Cluster** uses the `bitnami/redis-cluster` chart directly — it
   matches the existing docker-compose topology (6 nodes) and its image is
   multi-arch (works on both Apple Silicon and Intel/amd64 hosts).
-- **MongoDB** does **not** use the `bitnami/mongodb` chart. Since 2025-08-28,
-  Bitnami's free-tier images have moved to the `bitnamilegacy/*` Docker Hub
-  org, and `bitnamilegacy/mongodb` is **amd64-only** — it fails to pull on
-  arm64 hosts (e.g. Apple Silicon Macs) with `no match for platform in
-  manifest`. Since correctness for local testing matters more than reusing
-  a chart, MongoDB is deployed as a plain `Deployment`/`Service` using the
-  same `mongo:7.0` image already used in `docker-compose.yml`.
+- **ScyllaDB** is a plain `StatefulSet` in this chart rather than the Scylla
+  Operator: the operator brings its own CRDs and controller, which is more
+  machinery than a throwaway kind cluster needs. Each node owns a slice of
+  the token ring and its own volume, hence a StatefulSet plus a headless
+  Service for stable pod DNS (`hopr-scylladb-0..2.hopr-scylladb`), which is
+  also what the services use as `SCYLLA_CONTACT_POINTS`.
 - The **app services** (config-server, keygen, shortener, resolver) have no
   third-party chart to reuse — they're this project's own code — so they're
   packaged as a small first-party chart (`k8s/hopr-chart`) instead of loose
   `kubectl apply -f` manifests, for versioning and easier `values.yaml`
-  overrides (port, image tag, Mongo/Redis config). The gateway itself is a
+  overrides (port, image tag, Scylla/Redis config). The gateway itself is a
   native Kubernetes `Ingress` resource (`templates/ingress.yaml`), routed by
   the upstream `ingress-nginx` controller that `deploy.sh` installs
   separately — not an app-chart pod.
 
-If the Bitnami mongodb chart's arm64 support improves in the future, or if
-this always runs on amd64 CI, switching `templates/mongodb.yaml` back to a
-`bitnami/mongodb` Helm dependency is a contained change — the app's
-ConfigMap/Secret already isolate the Mongo connection details.
+Moving to the Scylla Operator later is a contained change — the app's
+ConfigMap already isolates the connection details (`SCYLLA_CONTACT_POINTS`,
+`SCYLLA_KEYSPACE`, `SCYLLA_DATACENTER`).
 
 ## Environment Variables — Mapping from `.env`
 
@@ -95,15 +93,14 @@ slightly from the root `.env` file's naming:
 
 | `.env` name (compose)                  | k8s name (what the app actually reads) |
 |-----------------------------------------|------------------------------------------|
-| `MONGODB_URI`                           | `MONGO_URI`                              |
 | `SHORTENER_SERVICE_PORT`                | `SHORTENER_SERVER_PORT`                  |
 | `RESOLVER_SERVICE_PORT`                 | `RESOLVER_SERVER_PORT`                   |
 | `KEYGEN_SERVICE_PORT`                   | `KEYGEN_SERVER_PORT`                     |
 | `SHORT_DOMAIN`                          | `SHORTENER_DOMAIN`                       |
 
-Non-secret values (Redis node list, ports, domain) live in `hopr-config` (a
-ConfigMap); credentials (`MONGO_URI` with the password embedded,
-`REDIS_PASSWORD`) live in `hopr-secret`. Both are rendered from
+Non-secret values (Redis node list, Scylla contact points/keyspace/datacenter,
+ports, domain) live in `hopr-config` (a ConfigMap); credentials
+(`REDIS_PASSWORD`) live in `hopr-secret`. Both are rendered from
 `k8s/hopr-chart/values.yaml` by the chart's `configmap.yaml` /
 `secret.yaml` templates — edit `values.yaml`, not the templates, to change
 a value.
@@ -161,9 +158,18 @@ This will, in order:
    become ready.
 5. Build all 4 app jars with Gradle, build their Docker images, and
    `kind load docker-image` them into the cluster (`k8s/build-and-load.sh`).
-6. `helm upgrade --install hopr ./k8s/hopr-chart` — deploys MongoDB, all 4
-   app services, and the `Ingress` resource.
-7. Wait for every Deployment's rollout to finish.
+6. On a fresh install only (no existing `hopr` Helm release):
+   `helm upgrade --install hopr ./k8s/hopr-chart --set urlServices.enabled=false`
+   — deploys ScyllaDB, `config-server`, `keygen-service`, and the `Ingress`
+   resource, but not yet `shortener-service`/`resolver-service`. On a re-run
+   this pass is skipped so the running URL services are not torn down.
+7. Wait for the ScyllaDB StatefulSet to become ready, then apply the Flyway
+   schema through a `kubectl port-forward` to `hopr-scylladb-0`
+   (`./gradlew :db-migration:migrateScylla -Pscylla.contactPoint=127.0.0.1:9042`).
+   `shortener-service` and `resolver-service` open a session against the `hopr`
+   keyspace at boot, which is why they are not created until this has run.
+8. `helm upgrade --install hopr ./k8s/hopr-chart` — adds (or upgrades) the two URL services.
+9. Wait for every Deployment's rollout to finish.
 
 The script uses `set -euo pipefail` and is **idempotent** — re-running it on
 an already-deployed cluster is safe (`helm upgrade --install` and
@@ -199,7 +205,7 @@ kind delete cluster --name hopr
 ```
 
 This deletes everything (cluster, namespace, all Helm releases, all data —
-there is no persistent volume backing MongoDB or Redis in this local setup).
+there is no retained volume backing ScyllaDB or Redis once the cluster is gone).
 
 ## How to Test
 
@@ -209,7 +215,7 @@ there is no persistent volume backing MongoDB or Redis in this local setup).
 kubectl get pods -n hopr
 ```
 
-Expected: every pod `1/1 Running` — `hopr-mongodb`, 6× `hopr-redis-redis-cluster-N`,
+Expected: every pod `1/1 Running` — 3× `hopr-scylladb-N`, 6× `hopr-redis-redis-cluster-N`,
 `config-server`, `keygen-service`, `shortener-service`, `resolver-service`,
 plus the `ingress-nginx-controller` pod in the `ingress-nginx` namespace.
 
@@ -222,7 +228,7 @@ kubectl exec -n hopr deploy/resolver-service  -- curl -sf http://localhost:8083/
 ```
 
 Expected: each prints JSON with `"status":"UP"` — `shortener-service` and
-`resolver-service` additionally report `"mongo":{"status":"UP"}` and
+`resolver-service` additionally report `"cassandra":{"status":"UP"}` and
 `"redis":{"status":"UP","details":{"cluster_size":...}}`.
 
 ### 3. End-to-end: shorten a URL through the gateway
@@ -236,7 +242,7 @@ curl -s -X POST http://localhost:8888/shorten \
 **Important:** the request body field is `longUrl`, not `url` — this is
 the exact field name `ShortenRequest` (in `common/src/main/java/.../dto/
 ShortenRequest.java`) expects. Sending `{"url": "..."}` gets silently
-accepted (no validation error) but persists a document with a `null` long
+accepted (no validation error) but persists a row with a `null` long
 URL, which then 500s on resolve — this is a pre-existing application-level
 gap, not something this k8s deployment introduced or can fix on its own.
 
@@ -249,19 +255,18 @@ curl -sI http://localhost:8888/<KEY>
 ```
 
 Expected: `HTTP/1.1 307` with a `Location: https://example.com` header —
-this proves direct service-to-service HTTP calls, MongoDB persistence, and
+this proves direct service-to-service HTTP calls, ScyllaDB persistence, and
 the Ingress routing all work together.
 
-### 5. Confirm MongoDB persistence directly (optional)
+### 5. Confirm ScyllaDB persistence directly (optional)
 
 ```bash
-POD=$(kubectl get pod -n hopr -l app=hopr-mongodb -o jsonpath='{.items[0].metadata.name}')
-kubectl exec -n hopr "$POD" -- mongosh "mongodb://root:password@localhost:27017/Hopr?authSource=admin" \
-  --quiet --eval "printjson(db.urls.find().toArray())"
+kubectl exec -n hopr hopr-scylladb-0 -- cqlsh -e \
+  "SELECT short_key, long_url, alias FROM hopr.urls"
 ```
 
-Expected: a document per shortened URL, e.g.
-`{ _id: '<KEY>', longUrl: 'https://example.com', ... }`.
+Expected: a row per shortened URL, e.g.
+`<KEY> | https://example.com | null`.
 
 ## Known Local-Environment Deviations
 
@@ -271,12 +276,11 @@ recorded here so they aren't mistaken for the "correct" production design:
 1. **Gateway host port is 8888, not 80** — to avoid colliding with the
    docker-compose stack's port 80, if it's running at the same time on the
    same machine. See "Why port 8888, not 80" above.
-2. **MongoDB is a plain Deployment, not a Bitnami Helm chart** — because
-   Bitnami's free-tier legacy image for MongoDB has no arm64 build. See
-   "Why Helm for the app layer" above.
-3. **No PersistentVolumeClaims** — MongoDB and Redis both use ephemeral
-   pod storage, matching the throwaway nature of a local test cluster.
-   Data is lost on pod restart or `kind delete cluster`.
+2. **ScyllaDB is a plain StatefulSet, not the Scylla Operator** — the
+   operator's CRDs and controller are more machinery than a local kind
+   cluster warrants. See "Why Helm for the app layer" above.
+3. **Redis uses ephemeral pod storage**, matching the throwaway nature of a
+   local test cluster; Scylla's volumes go with `kind delete cluster`.
 4. **Config Server uses a TCP probe, not HTTP** — because the
    `config-server` module has no Spring Boot Actuator dependency, unlike
    the other three services.

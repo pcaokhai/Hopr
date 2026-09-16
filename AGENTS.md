@@ -18,4 +18,7 @@ non-native element (e.g. a `next/link`) needs `nativeButton={false}` or Base UI 
 ScyllaDB schema lives in `db-migration/` as Flyway CQL migrations — see `db-migration/README.md`
 for how to run them and for the Scylla/Flyway constraints (counters vs. tablets, no semicolons in
 CQL comments) that will bite anyone editing a migration. Never apply DDL by hand via `cqlsh`.
-MongoDB still serves the running services; the repository swap to Scylla is a later PR.
+The services read and write it through Spring Data Cassandra (`common`'s `UrlMapping`/`UrlRepository`);
+MongoDB is gone. `UrlMapping`'s CQL column names are spelled out because the table is snake_case.
+`UrlRepository.save` is a plain CQL INSERT, i.e. an upsert — the check-then-save alias flow is still
+racy and needs `IF NOT EXISTS` to close.

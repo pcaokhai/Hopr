@@ -1,4 +1,4 @@
-package com.pcaokhai.urlshortenerservice.integration_tests.urlshort.config;
+package com.pcaokhai.resolverservice.integration_tests.config;
 
 import com.datastax.oss.driver.api.core.CqlSession;
 import org.springframework.boot.test.context.SpringBootTest;
