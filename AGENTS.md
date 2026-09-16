@@ -20,6 +20,8 @@ for how to run them and for the Scylla/Flyway constraints (counters vs. tablets,
 CQL comments) that will bite anyone editing a migration. Never apply DDL by hand via `cqlsh`.
 The services read and write it through Spring Data Cassandra (`common`'s `UrlMapping`/`UrlRepository`);
 MongoDB is gone. `UrlMapping`'s CQL column names are spelled out because the table is snake_case.
-`UrlRepository.save` is a plain CQL INSERT, i.e. an upsert, so it is only safe for the generated-key
-path; claiming a user-chosen alias goes through the `IF NOT EXISTS` lightweight transaction in the
-shortener's `DbCacheSaver.saveUrlMappingIfAbsent`.
+Every production write of `urls` claims its short key through the `IF NOT EXISTS` lightweight
+transaction in the shortener's `DbCacheSaver.saveUrlMappingIfAbsent` — a non-applied write becomes
+a 409 for a user-chosen alias and a bounded retry under a freshly generated key otherwise.
+`UrlRepository.save` is a plain CQL INSERT, i.e. an upsert that silently overwrites an existing
+row, and is not used to write.

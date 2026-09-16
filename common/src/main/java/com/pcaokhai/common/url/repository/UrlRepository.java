@@ -23,11 +23,12 @@ import org.springframework.stereotype.Repository;
  * Repository interface for managing URL mappings in ScyllaDB (CQL).
  * This interface extends CassandraRepository to provide CRUD operations for UrlMapping entities.
  *
- * <p>{@code save} maps to a plain CQL {@code INSERT}, which in Cassandra/Scylla is an
- * upsert: writing an existing partition key overwrites the row rather than failing. That is
- * safe only for the generated-key path, whose keys are already unique. Writes that must claim
- * a user-chosen key go through the lightweight transaction in the shortener's {@code
- * DbCacheSaver.saveUrlMappingIfAbsent} instead.
+ * <p>Every short key — user-chosen alias or generated — is claimed through the lightweight
+ * transaction in the shortener's {@code DbCacheSaver.saveUrlMappingIfAbsent}: a non-applied
+ * write becomes a 409 for an alias and a bounded retry under a fresh key for a generated one.
+ * {@code save} maps to a plain CQL {@code INSERT}, which in Cassandra/Scylla is an upsert —
+ * writing an existing partition key silently overwrites the row rather than failing — so it is
+ * not used to write.
  */
 @Repository
 public interface UrlRepository extends CassandraRepository<UrlMapping, String> {
