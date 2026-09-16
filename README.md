@@ -101,12 +101,14 @@ sequenceDiagram
     User->>GW: POST /shorten {"longUrl": "https://..."}
     GW->>SS: Forward request
     alt Custom Alias provided
-        SS->>DB: Check alias availability
+        SS->>DB: INSERT ... IF NOT EXISTS (claim alias)
+        Note over SS, DB: Not applied -> HTTP 409 Conflict
     else Auto-generate slug
         SS->>KS: GET /generate
         KS-->>SS: Return Base62 Key (e.g., "WuMBdp2")
+        SS->>DB: INSERT ... IF NOT EXISTS (claim key)
+        Note over SS, DB: Not applied -> retry with a fresh key (bounded)
     end
-    SS->>DB: Persist UrlMapping
     SS->>RC: Prime cache (key -> longUrl)
     SS-->>GW: Return {"shortUrl": "http://hopr.localhost/WuMBdp2"}
     GW-->>User: HTTP 200 OK
