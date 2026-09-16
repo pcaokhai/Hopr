@@ -6,6 +6,7 @@ import com.pcaokhai.urlshortenerservice.urlshort.application.KeyGenResolver;
 import com.pcaokhai.urlshortenerservice.urlshort.application.ShortenerUseCase;
 import com.pcaokhai.common.url.model.dto.ShortenRequest;
 import com.pcaokhai.common.url.model.dto.ShortenResponse;
+import com.pcaokhai.urlshortenerservice.urlshort.exception.AliasNotAvailableException;
 import com.pcaokhai.urlshortenerservice.urlshort.infra.DB.DbCacheSaver;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,17 +42,28 @@ public class ShortenerUseCaseTest {
         ShortenRequest req = new ShortenRequest(longUrl, alias);
         when(keyGenResolver.resolveShortKey(alias)).thenReturn(alias);
         when(domainProperties.toString()).thenReturn("https://short.ly/");
+        when(dbCacheSaver.saveUrlMappingIfAbsent(any())).thenReturn(true);
         ShortenResponse resp = useCase.shorten(req);
         assertEquals("https://short.ly/" + alias, resp.shortUrl());
         verify(aliasValidation).validate(alias);
         verify(keyGenResolver).resolveShortKey(alias);
-        verify(dbCacheSaver).saveUrlMapping(
+        verify(dbCacheSaver).saveUrlMappingIfAbsent(
                 argThat(mapping ->
                         mapping.getShortKey().equals(alias) &&
                                 mapping.getLongUrl().equals(longUrl) &&
                                 mapping.getAlias().equals(alias)
                 )
         );
+    }
+
+    @Test
+    void shorten_whenAliasAlreadyClaimed_throwsAliasNotAvailable() {
+        String alias = "taken";
+        ShortenRequest req = new ShortenRequest("https://example.com", alias);
+        when(keyGenResolver.resolveShortKey(alias)).thenReturn(alias);
+        when(dbCacheSaver.saveUrlMappingIfAbsent(any())).thenReturn(false);
+        assertThrows(AliasNotAvailableException.class, () -> useCase.shorten(req));
+        verify(dbCacheSaver, never()).saveUrlMapping(any());
     }
 
     @Test

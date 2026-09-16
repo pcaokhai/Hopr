@@ -4,9 +4,7 @@ import com.pcaokhai.common.url.model.UrlMapping;
 import com.pcaokhai.common.url.repository.UrlRepository;
 import com.pcaokhai.urlshortenerservice.integration_tests.urlshort.config.BaseIntegrationTest;
 import com.pcaokhai.urlshortenerservice.urlshort.application.AliasValidationComposite;
-import com.pcaokhai.urlshortenerservice.urlshort.application.AliasValidator;
 import com.pcaokhai.urlshortenerservice.urlshort.exception.AliasInvalidFormatException;
-import com.pcaokhai.urlshortenerservice.urlshort.exception.AliasNotAvailableException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,24 +35,18 @@ public class AliasValidationCompositeIntegrationTest extends BaseIntegrationTest
     }
 
     @Test
-    void validate_shouldThrowNotAvailable_whenAliasExists() {
-        String alias = "alias123";
-        urlRepository.save(new UrlMapping(alias, "https://x.com", alias));
-        assertThrows(AliasNotAvailableException.class, () ->
-                aliasValidationComposite.validate(alias)
-        );
-    }
-
-    @Test
     void validate_shouldNotThrow_forBlankAlias() {
         assertDoesNotThrow(() ->
                 aliasValidationComposite.validate("   ")
         );
     }
 
+    // Availability is no longer a validator: an already-taken alias is rejected by the
+    // INSERT ... IF NOT EXISTS in the write path, covered by AliasRaceIntegrationTest.
     @Test
-    void validate_shouldNotThrow_forValidNewAlias() {
+    void validate_shouldNotThrow_forAlreadyTakenButWellFormedAlias() {
         String alias = "Valid_Alias-1";
+        urlRepository.save(new UrlMapping(alias, "https://x.com", alias));
         assertDoesNotThrow(() ->
                 aliasValidationComposite.validate(alias)
         );

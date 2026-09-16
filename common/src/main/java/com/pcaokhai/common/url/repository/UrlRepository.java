@@ -24,10 +24,10 @@ import org.springframework.stereotype.Repository;
  * This interface extends CassandraRepository to provide CRUD operations for UrlMapping entities.
  *
  * <p>{@code save} maps to a plain CQL {@code INSERT}, which in Cassandra/Scylla is an
- * upsert: writing an existing partition key overwrites the row rather than failing. The
- * check-then-save alias flow therefore still has the same race it had on MongoDB; closing
- * it needs a lightweight transaction ({@code INSERT ... IF NOT EXISTS}), which is a
- * follow-up change.
+ * upsert: writing an existing partition key overwrites the row rather than failing. That is
+ * safe only for the generated-key path, whose keys are already unique. Writes that must claim
+ * a user-chosen key go through the lightweight transaction in the shortener's {@code
+ * DbCacheSaver.saveUrlMappingIfAbsent} instead.
  */
 @Repository
 public interface UrlRepository extends CassandraRepository<UrlMapping, String> {

@@ -20,7 +20,9 @@ import com.pcaokhai.urlshortenerservice.config.ShortenerProperties;
 import com.pcaokhai.common.url.model.dto.ShortenResponse;
 import com.pcaokhai.urlshortenerservice.urlshort.infra.DB.DbCacheSaver;
 import com.pcaokhai.common.url.model.dto.ShortenRequest;
+import com.pcaokhai.urlshortenerservice.urlshort.exception.AliasNotAvailableException;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 /**
  * Use case for shortening URLs.
@@ -47,7 +49,7 @@ public class ShortenerUseCase {
         validateAlias(request.alias());
         String shortKey = generateShortKey(request.alias());
         UrlMapping urlMapping = buildMapping(shortKey, request);
-        persist(urlMapping);
+        persist(urlMapping, request.alias());
         return buildShortUrl(shortKey);
     }
 
@@ -63,8 +65,17 @@ public class ShortenerUseCase {
         return new UrlMapping(shortKey, request.longUrl(), request.alias());
     }
 
-    private void persist(UrlMapping urlMapping) {
-        dbCacheSaver.saveUrlMapping(urlMapping);
+    // A custom alias is user-chosen, so two requests can race for the same one. Uniqueness is
+    // enforced by the storage layer (INSERT ... IF NOT EXISTS) rather than by a preceding
+    // existence check, which could only ever narrow the race window, never close it.
+    private void persist(UrlMapping urlMapping, String alias) {
+        if (!StringUtils.hasText(alias)) {
+            dbCacheSaver.saveUrlMapping(urlMapping);
+            return;
+        }
+        if (!dbCacheSaver.saveUrlMappingIfAbsent(urlMapping)) {
+            throw new AliasNotAvailableException("Alias " + alias + " is not available");
+        }
     }
 
     private ShortenResponse buildShortUrl(String shortKey) {
