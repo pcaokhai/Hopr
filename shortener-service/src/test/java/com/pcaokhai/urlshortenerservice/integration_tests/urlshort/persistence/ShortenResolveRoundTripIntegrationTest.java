@@ -57,8 +57,7 @@ class ShortenResolveRoundTripIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void shortenedUrlIsResolvableFromScylla() throws Exception {
-        // An explicit alias keeps keygen-service out of the round trip; KeyGenResolver
-        // returns the alias verbatim as the short key.
+        // An explicit alias keeps keygen-service out of the round trip; the alias is the short key.
         ShortenRequest request = new ShortenRequest("https://example.com/a/very/long/path", "roundtrip1");
 
         String body = mockMvc.perform(post("/shorten")

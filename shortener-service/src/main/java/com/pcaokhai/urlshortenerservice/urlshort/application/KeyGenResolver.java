@@ -17,12 +17,9 @@ package com.pcaokhai.urlshortenerservice.urlshort.application;
 
 import com.pcaokhai.urlshortenerservice.web.keygen.KeyGenClient;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 
 /**
- * Resolver for generating or resolving short keys.
- * This component uses a KeyGenClient to generate a new key if the provided alias is empty.
- * It is used to ensure that every URL has a valid short key.
+ * Resolver for generating short keys via the keygen service.
  *
  */
 @Component
@@ -32,7 +29,7 @@ public class KeyGenResolver {
     public KeyGenResolver(KeyGenClient keyGenClient) {
         this.keyGenClient = keyGenClient;
     }
-    public String resolveShortKey(String alias) {
-        return StringUtils.hasText(alias) ? alias : keyGenClient.generateKey();
+    public String resolveShortKey() {
+        return keyGenClient.generateKey();
     }
 }

@@ -45,11 +45,11 @@ public class ShortenerUseCase {
         this.dbCacheSaver = dbCacheSaver;
     }
 
+    private static final int MAX_GENERATED_KEY_ATTEMPTS = 5;
+
     public ShortenResponse shorten(ShortenRequest request) {
         validateAlias(request.alias());
-        String shortKey = generateShortKey(request.alias());
-        UrlMapping urlMapping = buildMapping(shortKey, request);
-        persist(urlMapping, request.alias());
+        String shortKey = claimShortKey(request);
         return buildShortUrl(shortKey);
     }
 
@@ -57,25 +57,31 @@ public class ShortenerUseCase {
         aliasValidation.validate(alias);
     }
 
-    private String generateShortKey(String alias) {
-        return keyGenResolver.resolveShortKey(alias);
+    // Both a user-chosen alias and a generated key can collide with an already claimed row, so
+    // every write goes through INSERT ... IF NOT EXISTS: the storage layer arbitrates uniqueness,
+    // a preceding existence check could only ever narrow the race window, never close it.
+    // A losing alias is the caller's problem (409); a losing generated key is an internal
+    // collision the caller cannot influence, so we simply ask keygen for another one.
+    private String claimShortKey(ShortenRequest request) {
+        String alias = request.alias();
+        if (StringUtils.hasText(alias)) {
+            if (!dbCacheSaver.saveUrlMappingIfAbsent(buildMapping(alias, request))) {
+                throw new AliasNotAvailableException("Alias " + alias + " is not available");
+            }
+            return alias;
+        }
+        for (int attempt = 0; attempt < MAX_GENERATED_KEY_ATTEMPTS; attempt++) {
+            String shortKey = keyGenResolver.resolveShortKey();
+            if (dbCacheSaver.saveUrlMappingIfAbsent(buildMapping(shortKey, request))) {
+                return shortKey;
+            }
+        }
+        throw new IllegalStateException(
+                "Could not claim a free short key after " + MAX_GENERATED_KEY_ATTEMPTS + " attempts");
     }
 
     private UrlMapping buildMapping(String shortKey, ShortenRequest request) {
         return new UrlMapping(shortKey, request.longUrl(), request.alias());
-    }
-
-    // A custom alias is user-chosen, so two requests can race for the same one. Uniqueness is
-    // enforced by the storage layer (INSERT ... IF NOT EXISTS) rather than by a preceding
-    // existence check, which could only ever narrow the race window, never close it.
-    private void persist(UrlMapping urlMapping, String alias) {
-        if (!StringUtils.hasText(alias)) {
-            dbCacheSaver.saveUrlMapping(urlMapping);
-            return;
-        }
-        if (!dbCacheSaver.saveUrlMappingIfAbsent(urlMapping)) {
-            throw new AliasNotAvailableException("Alias " + alias + " is not available");
-        }
     }
 
     private ShortenResponse buildShortUrl(String shortKey) {

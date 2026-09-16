@@ -5,6 +5,7 @@ import com.datastax.oss.driver.api.core.cql.Row;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pcaokhai.common.url.model.dto.ShortenRequest;
 import com.pcaokhai.common.url.repository.UrlRepository;
+import com.pcaokhai.urlshortenerservice.web.keygen.KeyGenClient;
 import com.pcaokhai.urlshortenerservice.integration_tests.urlshort.config.BaseIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -27,6 +29,7 @@ import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 /**
@@ -54,6 +57,9 @@ class AliasRaceIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private CqlSession cqlSession;
+
+    @MockitoBean
+    private KeyGenClient keyGenClient;
 
     @BeforeEach
     void clear() {
@@ -87,6 +93,29 @@ class AliasRaceIntegrationTest extends BaseIntegrationTest {
         // No silent overwrite: whichever request won, its long_url is the one that survived.
         assertTrue(urlA.equals(persisted) || urlB.equals(persisted), "unexpected long_url " + persisted);
         assertEquals(1, cqlSession.execute("SELECT short_key FROM hopr.urls").all().size());
+    }
+
+    @Test
+    void generatedKeyCollidingWithAnExistingAlias_doesNotOverwriteIt() throws Exception {
+        String claimed = "https://example.com/claimed";
+        mockMvc.perform(post("/shorten")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ShortenRequest(claimed, ALIAS))))
+                .andReturn();
+
+        // keygen hands out a key that a custom alias already owns, then a free one.
+        when(keyGenClient.generateKey()).thenReturn(ALIAS, "freekey");
+
+        int status = mockMvc.perform(post("/shorten")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ShortenRequest("https://example.com/generated", null))))
+                .andReturn().getResponse().getStatus();
+
+        assertEquals(200, status);
+        assertEquals(claimed, cqlSession.execute(
+                "SELECT long_url FROM hopr.urls WHERE short_key = '" + ALIAS + "'").one().getString("long_url"));
+        assertEquals("https://example.com/generated", cqlSession.execute(
+                "SELECT long_url FROM hopr.urls WHERE short_key = 'freekey'").one().getString("long_url"));
     }
 
     private int shorten(CyclicBarrier barrier, String longUrl) {

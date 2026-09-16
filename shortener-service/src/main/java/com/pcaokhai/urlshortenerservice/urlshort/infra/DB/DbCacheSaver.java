@@ -17,14 +17,13 @@ package com.pcaokhai.urlshortenerservice.urlshort.infra.DB;
 
 import com.datastax.oss.driver.api.core.ConsistencyLevel;
 import com.pcaokhai.common.url.model.UrlMapping;
-import com.pcaokhai.common.url.repository.UrlRepository;
 import org.springframework.cache.CacheManager;
 import org.springframework.data.cassandra.core.CassandraOperations;
 import org.springframework.data.cassandra.core.InsertOptions;
 import org.springframework.stereotype.Component;
 
 /** * DbCacheSaver is responsible for saving URL mappings to the database and updating the cache.
- * It uses a UrlRepository to persist the mappings and a CacheManager to manage the cache.
+ * Every write claims its short_key with a lightweight transaction, so a key maps to exactly one URL.
  *
  */
 @Component
@@ -33,27 +32,18 @@ public class DbCacheSaver {
     // INSERT ... IF NOT EXISTS is a lightweight transaction: Scylla runs Paxos over the
     // replicas of the partition so the conditional is evaluated exactly once cluster-wide.
     // SERIAL is the linearizable ballot consistency that makes that guarantee hold; it costs
-    // extra round trips, which is why only the custom-alias path pays for it. The generated-key
-    // path stays on the plain (non-LWT) insert below, because Snowflake already makes its keys
-    // unique.
+    // extra round trips, which every write pays for so that a short key maps to exactly one URL.
     private static final InsertOptions IF_NOT_EXISTS = InsertOptions.builder()
             .withIfNotExists()
             .serialConsistencyLevel(ConsistencyLevel.SERIAL)
             .build();
 
-    private final UrlRepository urlRepository;
     private final CassandraOperations cassandra;
     private final CacheManager cacheManager;
 
-    public DbCacheSaver(UrlRepository urlRepository, CassandraOperations cassandra, CacheManager cacheManager) {
-        this.urlRepository = urlRepository;
+    public DbCacheSaver(CassandraOperations cassandra, CacheManager cacheManager) {
         this.cassandra = cassandra;
         this.cacheManager = cacheManager;
-    }
-
-    public void saveUrlMapping(UrlMapping urlMapping) {
-        urlRepository.save(urlMapping);
-        cache(urlMapping);
     }
 
     /**
