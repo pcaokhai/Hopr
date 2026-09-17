@@ -1,7 +1,15 @@
 server:
   port: 8888
+  # config-server is not a config client, so it does not inherit the graceful shutdown
+  # settings in config-repo/application.yml and needs its own copy. Without it, a
+  # redeploy can cut an in-flight config fetch from a starting service mid-response.
+  shutdown: graceful
 
 spring:
+  # Same 20s drain budget as the other services, inside the 30s grace periods set in
+  # docker-compose.yml and k8s/hopr-chart/templates/config-server.yaml.
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
   application:
     name: config-server
   profiles:

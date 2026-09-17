@@ -4,6 +4,14 @@ metadata:
   name: config-server
   namespace: {{ .Values.namespace }}
 spec:
+  # The start-first rolling update the old Swarm stack.yml asked for: bring the new pod
+  # up and Ready before any old pod goes away. maxUnavailable: 0 states that at every
+  # replica count rather than relying on 25%-of-1 rounding to zero.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   replicas: 1
   selector:
     matchLabels:
@@ -13,12 +21,24 @@ spec:
       labels:
         app: config-server
     spec:
+      # Must exceed the app's own drain budget (spring.lifecycle
+      # .timeout-per-shutdown-phase=20s in config-server's application.yml); the kubelet
+      # SIGKILLs at this limit no matter how much draining is left.
+      terminationGracePeriodSeconds: 30
       containers:
         - name: config-server
           image: "hopr/config-server:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: 8888
+          # Removing a pod from the Service endpoints and telling it to shut down happen
+          # in parallel, and a starting service's spring.config.import fetch can still be
+          # routed here in that window. Sleeping in preStop delays SIGTERM long enough for
+          # the deregistration to propagate instead of answering connection-refused.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
           readinessProbe:
             tcpSocket:
               port: 8888

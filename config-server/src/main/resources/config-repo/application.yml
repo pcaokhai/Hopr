@@ -1,4 +1,17 @@
 spring:
+  # Graceful shutdown. On SIGTERM the server stops accepting new connections but lets
+  # in-flight requests finish before the JVM exits, instead of dropping them mid-flight.
+  # This matters on every rolling update and pod eviction, which is most of the time a
+  # pod dies.
+  #
+  # 20s budget: the slowest normal request here is a shorten that misses cache and goes
+  # nginx -> shortener -> keygen -> Scylla, comfortably under a second; 20s is that with
+  # enough margin to drain a request stuck behind a slow dependency, while still fitting
+  # inside the pods' 30s terminationGracePeriodSeconds (5s preStop + 20s drain, see
+  # k8s/hopr-chart/templates/*-service.yaml) so the kubelet never SIGKILLs a pod that is
+  # still draining.
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
   data:
     redis:
       password: ${REDIS_PASSWORD}
@@ -27,3 +40,6 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+
+server:
+  shutdown: graceful
