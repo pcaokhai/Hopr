@@ -20,7 +20,9 @@ import com.pcaokhai.urlshortenerservice.config.ShortenerProperties;
 import com.pcaokhai.common.url.model.dto.ShortenResponse;
 import com.pcaokhai.urlshortenerservice.urlshort.infra.DB.DbCacheSaver;
 import com.pcaokhai.common.url.model.dto.ShortenRequest;
+import com.pcaokhai.urlshortenerservice.urlshort.exception.AliasNotAvailableException;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 /**
  * Use case for shortening URLs.
@@ -43,11 +45,11 @@ public class ShortenerUseCase {
         this.dbCacheSaver = dbCacheSaver;
     }
 
+    private static final int MAX_GENERATED_KEY_ATTEMPTS = 5;
+
     public ShortenResponse shorten(ShortenRequest request) {
         validateAlias(request.alias());
-        String shortKey = generateShortKey(request.alias());
-        UrlMapping urlMapping = buildMapping(shortKey, request);
-        persist(urlMapping);
+        String shortKey = claimShortKey(request);
         return buildShortUrl(shortKey);
     }
 
@@ -55,16 +57,31 @@ public class ShortenerUseCase {
         aliasValidation.validate(alias);
     }
 
-    private String generateShortKey(String alias) {
-        return keyGenResolver.resolveShortKey(alias);
+    // Both a user-chosen alias and a generated key can collide with an already claimed row, so
+    // every write goes through INSERT ... IF NOT EXISTS: the storage layer arbitrates uniqueness,
+    // a preceding existence check could only ever narrow the race window, never close it.
+    // A losing alias is the caller's problem (409); a losing generated key is an internal
+    // collision the caller cannot influence, so we simply ask keygen for another one.
+    private String claimShortKey(ShortenRequest request) {
+        String alias = request.alias();
+        if (StringUtils.hasText(alias)) {
+            if (!dbCacheSaver.saveUrlMappingIfAbsent(buildMapping(alias, request))) {
+                throw new AliasNotAvailableException("Alias " + alias + " is not available");
+            }
+            return alias;
+        }
+        for (int attempt = 0; attempt < MAX_GENERATED_KEY_ATTEMPTS; attempt++) {
+            String shortKey = keyGenResolver.resolveShortKey();
+            if (dbCacheSaver.saveUrlMappingIfAbsent(buildMapping(shortKey, request))) {
+                return shortKey;
+            }
+        }
+        throw new IllegalStateException(
+                "Could not claim a free short key after " + MAX_GENERATED_KEY_ATTEMPTS + " attempts");
     }
 
     private UrlMapping buildMapping(String shortKey, ShortenRequest request) {
         return new UrlMapping(shortKey, request.longUrl(), request.alias());
-    }
-
-    private void persist(UrlMapping urlMapping) {
-        dbCacheSaver.saveUrlMapping(urlMapping);
     }
 
     private ShortenResponse buildShortUrl(String shortKey) {

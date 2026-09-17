@@ -24,28 +24,12 @@ public class KeyGenResolverTest {
     }
 
     @Test
-    void resolveShortKey_shouldReturnAlias_whenAliasIsPresent() {
-        String alias = "customAlias";
-        String result = keyGenResolver.resolveShortKey(alias);
-        assertEquals(alias, result);
-        verifyNoInteractions(keyGenClient);
-    }
-
-    @Test
-    void resolveShortKey_shouldCallKeyGen_whenAliasIsNull() {
+    void resolveShortKey_shouldCallKeyGen() {
         String generated = "gen123";
         when(keyGenClient.generateKey()).thenReturn(generated);
-        String result = keyGenResolver.resolveShortKey(null);
+        String result = keyGenResolver.resolveShortKey();
         assertEquals(generated, result);
         verify(keyGenClient).generateKey();
     }
 
-    @Test
-    void resolveShortKey_shouldCallKeyGen_whenAliasIsBlank() {
-        String generated = "gen123";
-        when(keyGenClient.generateKey()).thenReturn(generated);
-        String result = keyGenResolver.resolveShortKey(" ");
-        assertEquals(generated, result);
-        verify(keyGenClient).generateKey();
-    }
 }
