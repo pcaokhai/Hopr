@@ -250,7 +250,10 @@ All client requests enter through the Nginx Edge Gateway at `http://hopr.localho
 
 ### 1. Shorten a URL (Auto-Generated Key)
 
-> ⚠️ **Notice**: Request payload must contain the key `longUrl`.
+> ⚠️ **Notice**: Request payload must contain the key `longUrl`. It must be an absolute `http`/`https`
+> URL (scheme is case-insensitive), at most 2048 characters, and parseable as a URI — anything else is
+> rejected with `HTTP 400 Bad Request` and a `{"status": 400, "message": "..."}` body listing the
+> violations.
 
 ```bash
 curl -v -X POST http://hopr.localhost/shorten \
