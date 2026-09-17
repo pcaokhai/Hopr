@@ -6,6 +6,14 @@ metadata:
   namespace: {{ .Values.namespace }}
 spec:
   replicas: 1
+  # The start-first rolling update the old Swarm stack.yml asked for: bring the new pod
+  # up and Ready before any old pod goes away. maxUnavailable: 0 states that at every
+  # replica count rather than relying on 25%-of-1 rounding to zero.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: resolver-service
@@ -14,6 +22,10 @@ spec:
       labels:
         app: resolver-service
     spec:
+      # Must exceed the app's own drain budget (5s preStop + spring.lifecycle
+      # .timeout-per-shutdown-phase=20s in config-repo/application.yml); the kubelet
+      # SIGKILLs at this limit no matter how much draining is left.
+      terminationGracePeriodSeconds: 30
       containers:
         - name: resolver-service
           image: "hopr/resolver-service:{{ .Values.image.tag }}"
@@ -25,6 +37,15 @@ spec:
                 name: hopr-config
             - secretRef:
                 name: hopr-secret
+          # Removing a pod from the Service endpoints and telling it to shut down happen
+          # in parallel, and ingress-nginx needs a moment to observe the removal. Without
+          # this pause the pod starts refusing connections while nginx is still routing to
+          # it, turning a graceful shutdown into connection-refused errors. Sleeping in
+          # preStop delays SIGTERM long enough for the deregistration to propagate.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
           startupProbe:
             httpGet:
               path: /actuator/health

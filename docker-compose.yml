@@ -249,6 +249,9 @@ services:
       - default
 
   keygen-service:
+    # Compose SIGKILLs 10s after SIGTERM by default, which would cut the 20s graceful
+    # drain short; 30s matches the pods' terminationGracePeriodSeconds.
+    stop_grace_period: 30s
     build:
       context: ./keygen-service
       dockerfile: Dockerfile
@@ -267,6 +270,9 @@ services:
       - default
 
   shortener-service:
+    # Compose SIGKILLs 10s after SIGTERM by default, which would cut the 20s graceful
+    # drain short; 30s matches the pods' terminationGracePeriodSeconds.
+    stop_grace_period: 30s
     build:
       context: ./shortener-service
       dockerfile: Dockerfile
@@ -291,6 +297,9 @@ services:
       - default
 
   resolver-service:
+    # Compose SIGKILLs 10s after SIGTERM by default, which would cut the 20s graceful
+    # drain short; 30s matches the pods' terminationGracePeriodSeconds.
+    stop_grace_period: 30s
     build:
       context: ./resolver-service
       dockerfile: Dockerfile
