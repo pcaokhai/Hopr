@@ -43,3 +43,14 @@ which must be declared too (it does not pull the bridge transitively, so both li
 explicitly or the shortener->keygen hop starts a fresh trace. Both are covered by
 `TracePropagationIntegrationTest` (shortener) and `TraceContinuationIntegrationTest` (resolver);
 sampling and endpoint exposure live in `config-server/src/main/resources/config-repo/`.
+
+## Local config and secrets
+
+`docker-compose.yml` reads `.env` (non-secret config) and `.env.secrets` (credentials); both are
+gitignored and created from the committed `.env.example` / `.env.secrets.example`. The split
+mirrors the Helm chart's `hopr-config` ConfigMap vs `hopr-secret` Secret — add a new variable to
+whichever pair it belongs to, in both Compose and the chart. `DOCKER_COMPOSE_GUIDE.md` step 2
+is the setup instruction; a fresh clone without those copies fails `docker compose config`.
+
+All four service Dockerfiles run as the unprivileged `appuser` (uid 1001); the guide's step 6
+has the command that verifies it.

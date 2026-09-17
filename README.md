@@ -187,6 +187,12 @@ Dockerfiles copy compiled JARs from each service's `build/libs/`. Compile and pa
 git clone https://github.com/pcaokhai/Hopr.git
 cd Hopr
 
+# Environment files are gitignored; create them from the committed templates.
+# .env holds non-secret config, .env.secrets holds credentials - the same split the
+# Helm chart makes between the hopr-config ConfigMap and the hopr-secret Secret.
+cp .env.example .env
+cp .env.secrets.example .env.secrets
+
 # Build executable JARs (skip unit tests for fast build)
 ./gradlew bootJar -x test
 ```
@@ -413,7 +419,8 @@ Hopr/
 ├── docker-compose.yml         # Local multi-container Docker Compose definition
 ├── build.gradle.kts           # Multi-project root Gradle build (Kotlin DSL)
 ├── settings.gradle.kts        # Gradle module declarations
-├── .env                       # Local environment variables
+├── .env.example               # Template for .env (non-secret local config; gitignored copy)
+├── .env.secrets.example       # Template for .env.secrets (credentials; gitignored copy)
 └── README.md
 ```
 
@@ -421,18 +428,20 @@ Hopr/
 
 ## Configuration Reference
 
-Key variables defined in `.env`:
+`.env.example` and `.env.secrets.example` are the authoritative list of variables and their
+defaults; copy them as shown above. The ones worth explaining:
 
-| Variable | Default Value | Description |
+| Variable | File | Description |
 | :--- | :--- | :--- |
-| `SCYLLA_CONTACT_POINTS` | `scylla-node-1:9042,scylla-node-2:9042,scylla-node-3:9042` | Comma-separated CQL contact points |
-| `SCYLLA_PORT` | `9042` | CQL native transport port |
-| `SCYLLA_KEYSPACE` | `hopr` | Keyspace created by `db-migration` |
-| `SCYLLA_DATACENTER` | `datacenter1` | Driver's local datacenter, required for request routing |
-| `REDIS_NODE_1` ... `REDIS_NODE_6` | `redis-node-1:6379` ... `redis-node-6:6379` | Hostnames and ports for the 6 Redis Cluster nodes |
-| `SHORTENER_DOMAIN` | `http://hopr.localhost/` | Base domain prepended to generated short URLs |
-| `CONFIG_SERVER_URL` | `http://config-server:8888` | Upstream Config Server endpoint for service bootstrap |
-| `KEYGEN_SERVICE_URL` | `http://keygen-service:8081/generate` | Internal endpoint for Snowflake slug generation |
+| `SCYLLA_CONTACT_POINTS` | `.env` | Comma-separated CQL contact points |
+| `SCYLLA_KEYSPACE` | `.env` | Keyspace created by `db-migration` |
+| `SCYLLA_DATACENTER` | `.env` | Driver's local datacenter, required for request routing |
+| `REDIS_NODE_1` ... `REDIS_NODE_6` | `.env` | Hostnames and ports for the 6 Redis Cluster nodes |
+| `SHORTENER_DOMAIN` | `.env` | Base domain prepended to generated short URLs |
+| `REDIS_PASSWORD` | `.env.secrets` | Redis credential; empty locally, set for a deployed Redis |
+
+Inter-service endpoints (Config Server, keygen) are not environment variables — they come from
+each service's `application.yml` and the Config Server's `config-repo/`.
 
 ---
 

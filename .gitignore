@@ -35,6 +35,9 @@ Thumbs.db
 *.env
 .env.local
 .env.*
+# ...but the templates a fresh clone needs are committed (they hold no real credentials)
+!.env.example
+!.env.secrets.example
 stack.override.yml
 data/
 
