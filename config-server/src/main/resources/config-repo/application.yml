@@ -10,3 +10,20 @@ spring:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
+
+# Tracing is on for every service so one request keeps a single trace ID across
+# Gateway -> Shortener -> Keygen and Gateway -> Resolver. Propagation is W3C
+# `traceparent`, which nginx forwards untouched, and Spring's instrumented
+# RestClient/WebClient/servlet filter read and write it without manual plumbing.
+#
+# 100% sampling: at this traffic level every trace is cheap and a dropped trace is
+# exactly the one you wanted during a learning debug session. A real production
+# service lowers this (1-10%) because span volume scales with request volume and
+# the storage/ingest bill, not the app, is what sampling protects.
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  metrics:
+    tags:
+      application: ${spring.application.name}

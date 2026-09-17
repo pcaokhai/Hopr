@@ -32,3 +32,14 @@ Spring Boot 4 ships no AOP starter and nothing puts AspectJ on the classpath, so
 `@CircuitBreaker`/`@Retry` annotations are inert here — the aspect beans never register. Apply
 Resilience4j programmatically through the autoconfigured `CircuitBreakerRegistry` instead (see
 `shortener-service`'s `KeyGenClient`). Thresholds live in `config-server/src/main/resources/config-repo/`.
+
+## Observability
+
+Tracing and Prometheus metrics are on in all three Spring services. Two Boot 4 traps: the
+`micrometer-tracing-bridge-*` artifact alone leaves you with Boot's `NoopTracer` — the
+auto-configuration that builds a real `Tracer` lives in `spring-boot-micrometer-tracing-brave`,
+which must be declared too (it does not pull the bridge transitively, so both lines are load-bearing); and `shortener-service` defines its own `WebClient.Builder`
+(`WebClientConfig`) instead of Boot's, so it has to be handed the `ObservationRegistry`
+explicitly or the shortener->keygen hop starts a fresh trace. Both are covered by
+`TracePropagationIntegrationTest` (shortener) and `TraceContinuationIntegrationTest` (resolver);
+sampling and endpoint exposure live in `config-server/src/main/resources/config-repo/`.

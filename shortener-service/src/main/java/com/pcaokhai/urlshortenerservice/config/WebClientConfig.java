@@ -15,19 +15,28 @@
  */
 package com.pcaokhai.urlshortenerservice.config;
 
+import io.micrometer.observation.ObservationRegistry;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.client.WebClient;
 
 /**
- * Configuration class providing a plain WebClient.Builder.
+ * Configuration class providing the WebClient.Builder used to call keygen-service.
  * Downstream service URLs are literal (see KeyGenClient), resolved by the
  * container platform's own DNS (Compose embedded DNS / k8s CoreDNS).
+ *
+ * <p>The builder is handed the {@link ObservationRegistry} so every outgoing call
+ * becomes a client span under the current server span, which is what makes the
+ * W3C {@code traceparent} header appear on the wire. Boot's own auto-configured,
+ * pre-instrumented {@code WebClient.Builder} is not available here: this service
+ * pulls in plain {@code spring-webflux} for the client only, without the WebFlux
+ * auto-configuration module. Drop this line and the shortener -> keygen hop
+ * silently starts a brand new trace.
  */
 @Configuration
 public class WebClientConfig {
     @Bean
-    public WebClient.Builder webClientBuild() {
-        return WebClient.builder();
+    public WebClient.Builder webClientBuild(ObservationRegistry observationRegistry) {
+        return WebClient.builder().observationRegistry(observationRegistry);
     }
 }
