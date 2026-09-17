@@ -187,6 +187,12 @@ Dockerfiles copy compiled JARs from each service's `build/libs/`. Compile and pa
 git clone https://github.com/pcaokhai/Hopr.git
 cd Hopr
 
+# Environment files are gitignored; create them from the committed templates.
+# .env holds non-secret config, .env.secrets holds credentials - the same split the
+# Helm chart makes between the hopr-config ConfigMap and the hopr-secret Secret.
+cp .env.example .env
+cp .env.secrets.example .env.secrets
+
 # Build executable JARs (skip unit tests for fast build)
 ./gradlew bootJar -x test
 ```
@@ -413,7 +419,8 @@ Hopr/
 ├── docker-compose.yml         # Local multi-container Docker Compose definition
 ├── build.gradle.kts           # Multi-project root Gradle build (Kotlin DSL)
 ├── settings.gradle.kts        # Gradle module declarations
-├── .env                       # Local environment variables
+├── .env.example               # Template for .env (non-secret local config; gitignored copy)
+├── .env.secrets.example       # Template for .env.secrets (credentials; gitignored copy)
 └── README.md
 ```
 

@@ -45,17 +45,25 @@ Because the Dockerfiles copy JARs directly from each service's `build/libs/` dir
 
 ---
 
-### Step 2: Verify Configuration (`.env`)
+### Step 2: Create the Environment Files (`.env`, `.env.secrets`)
 
-The `.env` file at the root contains pre-configured settings for local containerized communication:
-- `SCYLLA_CONTACT_POINTS=scylla-node-1:9042,scylla-node-2:9042,scylla-node-3:9042`
-- `SCYLLA_PORT=9042`
-- `SCYLLA_KEYSPACE=hopr`
-- `SCYLLA_DATACENTER=datacenter1`
-- `REDIS_NODE_1=redis-node-1:6379` ... `REDIS_NODE_6=redis-node-6:6379`
-- `SHORTENER_DOMAIN=http://hopr.localhost/`
+Neither file is committed. Copy them from the templates on a fresh clone:
 
-Ensure the ports and credentials match your intended local setup.
+```bash
+cp .env.example .env
+cp .env.secrets.example .env.secrets
+```
+
+The split mirrors the Helm chart, where non-secret configuration lives in the `hopr-config`
+ConfigMap and credentials live in the `hopr-secret` Secret:
+
+| File | Contains | k8s counterpart |
+| :--- | :--- | :--- |
+| `.env` | ScyllaDB contact points/keyspace, Redis node addresses, service ports, `SHORTENER_DOMAIN` | `templates/configmap.yaml` |
+| `.env.secrets` | `REDIS_PASSWORD` (empty locally — the Compose Redis cluster starts without `--requirepass`) | `templates/secret.yaml` |
+
+Keep credentials out of `.env` and out of `docker-compose.yml` even when the local value is
+empty: how secrets are handled locally is how they end up being handled in production.
 
 ---
 
@@ -107,6 +115,26 @@ Or check logs for specific services:
 docker compose logs -f shortener-service
 docker compose logs -f resolver-service
 docker compose logs -f api-gateway
+```
+
+### Step 6: Verify the Services Do Not Run as Root
+
+All four Spring Boot images create an unprivileged `appuser` (uid 1001) and switch to it with
+`USER`, so a container-breakout vulnerability lands as an unprivileged host user instead of
+host root. Confirm it after any Dockerfile change:
+
+```bash
+for s in config-server keygen-service resolver-service shortener-service; do
+  echo -n "$s: "; docker compose exec -T "$s" id -un
+done
+```
+
+Every line must print `appuser`. `root` means the `USER` directive was lost.
+
+The images can also be checked without starting the stack:
+
+```bash
+docker run --rm --entrypoint id hopr/shortener-service:latest
 ```
 
 ---

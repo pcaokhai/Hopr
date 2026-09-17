@@ -263,7 +263,11 @@ services:
     environment:
       JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=25.0"
     env_file:
+      # Non-secret config and credentials are split the same way the Helm chart splits
+      # hopr-config (ConfigMap) from hopr-secret (Secret). Both files are gitignored;
+      # copy them from .env.example / .env.secrets.example on a fresh clone.
       - .env
+      - .env.secrets
     ports:
       - "8081:8081"
     depends_on:
@@ -284,7 +288,11 @@ services:
     environment:
       JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=25.0"
     env_file:
+      # Non-secret config and credentials are split the same way the Helm chart splits
+      # hopr-config (ConfigMap) from hopr-secret (Secret). Both files are gitignored;
+      # copy them from .env.example / .env.secrets.example on a fresh clone.
       - .env
+      - .env.secrets
     ports:
       - "8080:8080"
     depends_on:
@@ -311,7 +319,11 @@ services:
     environment:
       JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=25.0"
     env_file:
+      # Non-secret config and credentials are split the same way the Helm chart splits
+      # hopr-config (ConfigMap) from hopr-secret (Secret). Both files are gitignored;
+      # copy them from .env.example / .env.secrets.example on a fresh clone.
       - .env
+      - .env.secrets
     ports:
       - "8083:8083"
     depends_on:
