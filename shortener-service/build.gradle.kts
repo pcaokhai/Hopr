@@ -7,6 +7,7 @@ dependencies {
     implementation("org.springframework:spring-webflux")
     implementation("org.springframework.cloud:spring-cloud-starter-config")
     implementation("org.springframework.retry:spring-retry")
+    implementation("org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j")
     implementation("org.springframework.boot:spring-boot-jackson2")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")

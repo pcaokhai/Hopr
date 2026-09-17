@@ -16,42 +16,95 @@
 package com.pcaokhai.urlshortenerservice.web.keygen;
 
 import com.pcaokhai.urlshortenerservice.urlshort.exception.KeygenServiceUnvailableException;
+import com.pcaokhai.urlshortenerservice.urlshort.exception.KeygenTimeoutException;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientException;
+import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * Client for interacting with the Keygen service to generate short keys.
- * This component uses WebClient to make HTTP requests to the Keygen service.
+ *
+ * <p>The call is guarded twice. A reactive {@code .timeout()} bounds any single
+ * call so a hung keygen-service cannot pin a Tomcat request thread forever, and a
+ * Resilience4j circuit breaker ({@value #CIRCUIT_BREAKER}) trips after a run of
+ * failures so subsequent callers fail fast instead of each paying the timeout.
+ * The breaker is applied programmatically rather than with {@code @CircuitBreaker}:
+ * Spring Boot 4 ships no AOP starter, so the annotation's aspect is not active here.
+ * Thresholds live in {@code resilience4j.circuitbreaker} config; its state is
+ * visible on {@code /actuator/health} and {@code /actuator/circuitbreakers}.
  */
 @Component
 public class KeyGenClient {
+    public static final String CIRCUIT_BREAKER = "keygen";
+
+    /**
+     * keygen-service pops a pre-generated key off Redis, so a healthy call is
+     * single-digit milliseconds. 800ms leaves ample headroom for a GC pause or a
+     * DNS/connect hiccup while still being far below any human-perceptible stall,
+     * and well below Tomcat's connection timeout.
+     */
+    static final Duration CALL_TIMEOUT = Duration.ofMillis(800);
+
+    private static final Logger log = LoggerFactory.getLogger(KeyGenClient.class);
+
     private final WebClient webClient;
     private final String keygenServiceUrl;
+    private final CircuitBreaker circuitBreaker;
 
-    public KeyGenClient(WebClient.Builder builder, @Value("${keygen.service.url}") String keygenServiceUrl) {
+    public KeyGenClient(WebClient.Builder builder,
+                        CircuitBreakerRegistry circuitBreakerRegistry,
+                        @Value("${keygen.service.url}") String keygenServiceUrl) {
         this.webClient = builder.build();
         this.keygenServiceUrl = keygenServiceUrl;
+        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER);
     }
 
     public String generateKey() {
-        return callKeygenService()
-                .orElseThrow(() -> new KeygenServiceUnvailableException("Keygen Service Is Unavailable"));
+        try {
+            return circuitBreaker.executeSupplier(this::callKeygenService);
+        } catch (CallNotPermittedException e) {
+            log.warn("keygen circuit breaker is open - failing fast without calling keygen-service");
+            throw new KeygenServiceUnvailableException();
+        } catch (KeygenTimeoutException e) {
+            log.warn("keygen-service unavailable: {}", e.getMessage());
+            throw new KeygenServiceUnvailableException();
+        } catch (WebClientException e) {
+            log.warn("keygen-service unavailable: call failed: {}", e.getMessage());
+            throw new KeygenServiceUnvailableException();
+        } catch (KeygenServiceUnvailableException e) {
+            // Already diagnosed inside the call (e.g. a response with no shortKey).
+            throw e;
+        } catch (RuntimeException e) {
+            // Not keygen being down - something in this code or in the response
+            // contract is wrong. Log loudly with the stack trace instead of
+            // burying a real bug under "keygen is unavailable".
+            log.error("Unexpected failure while calling keygen-service", e);
+            throw new KeygenServiceUnvailableException();
+        }
     }
 
-    private Optional<String> callKeygenService() {
-        try {
-            return Optional.ofNullable(webClient.get()
-                    .uri(keygenServiceUrl + "/generate")
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .map(response -> (String) response.get("shortKey"))
-                    .block());
-        } catch (Exception e) {
-            return Optional.empty();
+    private String callKeygenService() {
+        String shortKey = webClient.get()
+                .uri(keygenServiceUrl + "/generate")
+                .retrieve()
+                .bodyToMono(Map.class)
+                .map(response -> (String) response.get("shortKey"))
+                .timeout(CALL_TIMEOUT, Mono.error(() -> new KeygenTimeoutException(CALL_TIMEOUT)))
+                .block();
+        if (shortKey == null || shortKey.isBlank()) {
+            log.warn("keygen-service returned a response without a usable shortKey");
+            throw new KeygenServiceUnvailableException();
         }
+        return shortKey;
     }
 }
