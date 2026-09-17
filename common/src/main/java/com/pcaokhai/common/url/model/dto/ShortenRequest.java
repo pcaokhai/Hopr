@@ -15,17 +15,33 @@
  */
 package com.pcaokhai.common.url.model.dto;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
 import java.io.Serializable;
 
 /**
  * Represents a request to shorten a URL.
  * This record encapsulates the long URL to be shortened and an optional alias for the shortened URL.
  *
- * @param longUrl The original long URL that needs to be shortened.
+ * @param longUrl The original long URL that needs to be shortened. Restricted to absolute
+ *                {@code http}/{@code https} URLs so a short link can never be turned into a
+ *                redirect to {@code javascript:}, {@code data:} or any other scheme, and capped
+ *                at {@value #MAX_LONG_URL_LENGTH} characters, the de-facto browser/CDN URL limit.
  * @param alias   An optional alias for the shortened URL, which can be used instead of a generated key.
  */
 public record ShortenRequest(
+        @NotBlank(message = "longUrl must not be blank")
+        @Size(max = MAX_LONG_URL_LENGTH, message = "longUrl must be at most " + MAX_LONG_URL_LENGTH + " characters")
+        @Pattern(regexp = HTTP_URL, message = "longUrl must be an absolute http or https URL")
         String longUrl,
         String alias
 ) implements Serializable {
+
+    /** Longest URL we accept: the practical ceiling browsers and CDNs impose on a URL. */
+    public static final int MAX_LONG_URL_LENGTH = 2048;
+
+    /** Absolute http(s) URL with a non-empty, whitespace-free host. */
+    private static final String HTTP_URL = "^https?://[^\\s/?#]+[^\\s]*$";
 }
