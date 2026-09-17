@@ -13,6 +13,10 @@ spec:
       labels:
         app: config-server
     spec:
+      # Must exceed the app's own drain budget (spring.lifecycle
+      # .timeout-per-shutdown-phase=20s in config-server's application.yml); the kubelet
+      # SIGKILLs at this limit no matter how much draining is left.
+      terminationGracePeriodSeconds: 30
       containers:
         - name: config-server
           image: "hopr/config-server:{{ .Values.image.tag }}"

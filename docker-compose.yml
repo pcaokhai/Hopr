@@ -238,6 +238,9 @@ services:
 
   # -------------------- Spring Boot Microservices --------------------
   config-server:
+    # Compose SIGKILLs 10s after SIGTERM by default, which would cut the 20s graceful
+    # drain short; 30s matches the pods' terminationGracePeriodSeconds.
+    stop_grace_period: 30s
     build:
       context: ./config-server
       dockerfile: Dockerfile

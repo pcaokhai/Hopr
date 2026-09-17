@@ -8,10 +8,14 @@ import org.springframework.boot.tomcat.autoconfigure.servlet.TomcatServletWebSer
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
 import org.springframework.boot.webmvc.autoconfigure.DispatcherServletAutoConfiguration;
 import org.springframework.boot.webmvc.autoconfigure.WebMvcAutoConfiguration;
+import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.file.Path;
+import java.util.Properties;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -27,6 +31,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Proves the shutdown settings we ship in config-repo/application.yml
  * ({@code server.shutdown=graceful} + {@code spring.lifecycle.timeout-per-shutdown-phase})
  * actually let an in-flight request finish instead of dropping it.
+ *
+ * <p>The two properties are read out of the shipped config-repo/application.yml rather than
+ * hardcoded here, so deleting them from the shipped file fails this test.
  *
  * <p>ponytail: this boots a three-autoconfiguration throwaway web app rather than the real
  * shortener context. The behaviour under test is Boot's web-server lifecycle driven by those
@@ -56,8 +63,25 @@ class GracefulShutdownIntegrationTest {
         }
     }
 
+    private static Properties shippedConfig() {
+        Path repoRoot = Path.of("").toAbsolutePath();
+        while (!repoRoot.resolve("config-server").toFile().isDirectory()) {
+            repoRoot = repoRoot.getParent();
+        }
+        YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
+        yaml.setResources(new FileSystemResource(
+                repoRoot.resolve("config-server/src/main/resources/config-repo/application.yml")));
+        yaml.afterPropertiesSet();
+        return yaml.getObject();
+    }
+
     @Test
     void completesAnInFlightRequestAfterShutdownBegins() throws Exception {
+        Properties shipped = shippedConfig();
+        assertThat(shipped.getProperty("server.shutdown")).isEqualTo("graceful");
+        String shutdownTimeout = shipped.getProperty("spring.lifecycle.timeout-per-shutdown-phase");
+        assertThat(shutdownTimeout).isNotNull();
+
         ConfigurableApplicationContext context = new SpringApplicationBuilder(SlowApp.class)
                 .properties(
                         // This throwaway context must not inherit the module's test config,
@@ -65,8 +89,8 @@ class GracefulShutdownIntegrationTest {
                         "spring.config.location=",
                         "spring.cloud.config.enabled=false",
                         "server.port=0",
-                        "server.shutdown=graceful",
-                        "spring.lifecycle.timeout-per-shutdown-phase=20s")
+                        "server.shutdown=" + shipped.getProperty("server.shutdown"),
+                        "spring.lifecycle.timeout-per-shutdown-phase=" + shutdownTimeout)
                 .run();
         int port = ((WebServerApplicationContext) context).getWebServer().getPort();
 
