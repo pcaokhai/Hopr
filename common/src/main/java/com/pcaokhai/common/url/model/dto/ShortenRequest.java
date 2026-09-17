@@ -15,6 +15,7 @@
  */
 package com.pcaokhai.common.url.model.dto;
 
+import com.pcaokhai.common.url.model.dto.validation.ParseableUri;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -35,6 +36,7 @@ public record ShortenRequest(
         @NotBlank(message = "longUrl must not be blank")
         @Size(max = MAX_LONG_URL_LENGTH, message = "longUrl must be at most " + MAX_LONG_URL_LENGTH + " characters")
         @Pattern(regexp = HTTP_URL, message = "longUrl must be an absolute http or https URL")
+        @ParseableUri(message = "longUrl must be a parseable URI")
         String longUrl,
         String alias
 ) implements Serializable {

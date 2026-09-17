@@ -82,6 +82,12 @@ class ShortenRequestValidationTest {
         expectRejected(longUrl, "absolute http or https URL");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"https://example.com/a<b", "https://example.com/a{b}", "https://example.com/a|b"})
+    void rejectsUrlTheResolverCouldNotParse(String longUrl) throws Exception {
+        expectRejected(longUrl, "parseable URI");
+    }
+
     @Test
     void rejectsOverLengthUrl() throws Exception {
         String longUrl = "https://example.com/" + "a".repeat(ShortenRequest.MAX_LONG_URL_LENGTH);
