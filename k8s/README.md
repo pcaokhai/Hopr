@@ -86,17 +86,11 @@ ConfigMap already isolates the connection details (`SCYLLA_CONTACT_POINTS`,
 
 ## Environment Variables — Mapping from `.env`
 
-The k8s ConfigMap/Secret intentionally use the **exact env var names each
-service's `application.yml` expects** (verified by reading
-`*/src/main/resources/application.yml` in each service), which differ
-slightly from the root `.env` file's naming:
-
-| `.env` name (compose)                  | k8s name (what the app actually reads) |
-|-----------------------------------------|------------------------------------------|
-| `SHORTENER_SERVICE_PORT`                | `SHORTENER_SERVER_PORT`                  |
-| `RESOLVER_SERVICE_PORT`                 | `RESOLVER_SERVER_PORT`                   |
-| `KEYGEN_SERVICE_PORT`                   | `KEYGEN_SERVER_PORT`                     |
-| `SHORT_DOMAIN`                          | `SHORTENER_DOMAIN`                       |
+The k8s ConfigMap/Secret use the **exact env var names each service's
+`application.yml` expects**, and so do the Compose templates at the repo
+root (`.env.example` / `.env.secrets.example`) — the two sides no longer
+differ in naming, so a variable added to one can be copied verbatim to the
+other.
 
 Non-secret values (Redis node list, Scylla contact points/keyspace/datacenter,
 ports, domain) live in `hopr-config` (a ConfigMap); credentials
