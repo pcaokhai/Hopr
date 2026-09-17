@@ -25,3 +25,10 @@ transaction in the shortener's `DbCacheSaver.saveUrlMappingIfAbsent` — a non-a
 a 409 for a user-chosen alias and a bounded retry under a freshly generated key otherwise.
 `UrlRepository.save` is a plain CQL INSERT, i.e. an upsert that silently overwrites an existing
 row, and is not used to write.
+
+## Resilience
+
+Spring Boot 4 ships no AOP starter and nothing puts AspectJ on the classpath, so Resilience4j's
+`@CircuitBreaker`/`@Retry` annotations are inert here — the aspect beans never register. Apply
+Resilience4j programmatically through the autoconfigured `CircuitBreakerRegistry` instead (see
+`shortener-service`'s `KeyGenClient`). Thresholds live in `config-server/src/main/resources/config-repo/`.

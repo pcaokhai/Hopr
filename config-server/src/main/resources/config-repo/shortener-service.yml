@@ -5,7 +5,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,circuitbreakers,circuitbreakerevents
   endpoint:
     health:
       show-details: always
@@ -35,3 +35,19 @@ shortener:
 keygen:
   service:
     url: http://keygen-service:8081
+
+# Guards the blocking keygen-service call. Tuned for a low-traffic learning
+# project: a 10-call window with a 5-call minimum so the breaker reacts within
+# seconds, but never on a single unlucky call.
+resilience4j:
+  circuitbreaker:
+    instances:
+      keygen:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
