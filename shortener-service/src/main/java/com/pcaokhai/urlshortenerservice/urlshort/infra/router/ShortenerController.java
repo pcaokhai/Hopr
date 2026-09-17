@@ -19,6 +19,7 @@ import com.pcaokhai.urlshortenerservice.urlshort.annotations.ShortenUrlOperation
 import com.pcaokhai.urlshortenerservice.urlshort.application.ShortenerUseCase;
 import com.pcaokhai.common.url.model.dto.ShortenRequest;
 import com.pcaokhai.common.url.model.dto.ShortenResponse;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -41,7 +42,7 @@ public class ShortenerController {
 
     @PostMapping
     @ShortenUrlOperation
-    public ResponseEntity<ShortenResponse> shortenUrl(@RequestBody ShortenRequest request) {
+    public ResponseEntity<ShortenResponse> shortenUrl(@Valid @RequestBody ShortenRequest request) {
         ShortenResponse shortUrl = shortenerUseCase.shorten(request);
         return ResponseEntity.ok(shortUrl);
     }
