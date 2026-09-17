@@ -70,8 +70,9 @@ public class KeyGenClient {
     }
 
     public String generateKey() {
+        Map<?, ?> response;
         try {
-            return circuitBreaker.executeSupplier(this::callKeygenService);
+            response = circuitBreaker.executeSupplier(this::callKeygenService);
         } catch (CallNotPermittedException e) {
             log.warn("keygen circuit breaker is open - failing fast without calling keygen-service");
             throw new KeygenServiceUnvailableException();
@@ -81,30 +82,30 @@ public class KeyGenClient {
         } catch (WebClientException e) {
             log.warn("keygen-service unavailable: call failed: {}", e.getMessage());
             throw new KeygenServiceUnvailableException();
-        } catch (KeygenServiceUnvailableException e) {
-            // Already diagnosed inside the call (e.g. a response with no shortKey).
-            throw e;
         } catch (RuntimeException e) {
-            // Not keygen being down - something in this code or in the response
-            // contract is wrong. Log loudly with the stack trace instead of
-            // burying a real bug under "keygen is unavailable".
             log.error("Unexpected failure while calling keygen-service", e);
+            throw new KeygenServiceUnvailableException();
+        }
+
+        try {
+            String shortKey = response == null ? null : (String) response.get("shortKey");
+            if (shortKey == null || shortKey.isBlank()) {
+                log.error("keygen-service returned a response without a usable shortKey: {}", response);
+                throw new KeygenServiceUnvailableException();
+            }
+            return shortKey;
+        } catch (ClassCastException e) {
+            log.error("Unexpected keygen-service response shape: {}", response, e);
             throw new KeygenServiceUnvailableException();
         }
     }
 
-    private String callKeygenService() {
-        String shortKey = webClient.get()
+    private Map<?, ?> callKeygenService() {
+        return webClient.get()
                 .uri(keygenServiceUrl + "/generate")
                 .retrieve()
                 .bodyToMono(Map.class)
-                .map(response -> (String) response.get("shortKey"))
                 .timeout(CALL_TIMEOUT, Mono.error(() -> new KeygenTimeoutException(CALL_TIMEOUT)))
                 .block();
-        if (shortKey == null || shortKey.isBlank()) {
-            log.warn("keygen-service returned a response without a usable shortKey");
-            throw new KeygenServiceUnvailableException();
-        }
-        return shortKey;
     }
 }
