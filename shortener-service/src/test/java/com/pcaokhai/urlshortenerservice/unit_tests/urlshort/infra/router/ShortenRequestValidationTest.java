@@ -75,7 +75,8 @@ class ShortenRequestValidationTest {
             "//example.com",
             "example.com",
             "https://",
-            "not a url"
+            "not a url",
+            "https://example.com/x\n"
     })
     void rejectsAnythingThatIsNotAnAbsoluteHttpUrl(String longUrl) throws Exception {
         expectRejected(longUrl, "absolute http or https URL");
