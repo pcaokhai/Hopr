@@ -58,7 +58,7 @@ class ShortenRequestValidationTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"http://example.com/a?b=c", "https://example.com"})
+    @ValueSource(strings = {"http://example.com/a?b=c", "https://example.com", "HTTPS://example.com", "Http://example.com/a"})
     void acceptsAbsoluteHttpUrls(String longUrl) throws Exception {
         when(shortenerUseCase.shorten(any())).thenReturn(new ShortenResponse("http://short.ly/abc123"));
 

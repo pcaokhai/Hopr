@@ -43,5 +43,5 @@ public record ShortenRequest(
     public static final int MAX_LONG_URL_LENGTH = 2048;
 
     /** Absolute http(s) URL with a non-empty, whitespace-free host. */
-    private static final String HTTP_URL = "^https?://[^\\s/?#]+[^\\s]*\\z";
+    private static final String HTTP_URL = "^(?i:https?)://[^\\s/?#]+[^\\s]*\\z";
 }
