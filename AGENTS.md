@@ -38,7 +38,7 @@ Resilience4j programmatically through the autoconfigured `CircuitBreakerRegistry
 Tracing and Prometheus metrics are on in all three Spring services. Two Boot 4 traps: the
 `micrometer-tracing-bridge-*` artifact alone leaves you with Boot's `NoopTracer` — the
 auto-configuration that builds a real `Tracer` lives in `spring-boot-micrometer-tracing-brave`,
-which must be declared too; and `shortener-service` defines its own `WebClient.Builder`
+which must be declared too (it does not pull the bridge transitively, so both lines are load-bearing); and `shortener-service` defines its own `WebClient.Builder`
 (`WebClientConfig`) instead of Boot's, so it has to be handed the `ObservationRegistry`
 explicitly or the shortener->keygen hop starts a fresh trace. Both are covered by
 `TracePropagationIntegrationTest` (shortener) and `TraceContinuationIntegrationTest` (resolver);
