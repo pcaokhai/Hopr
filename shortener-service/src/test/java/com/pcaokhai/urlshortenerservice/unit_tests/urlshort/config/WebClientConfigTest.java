@@ -15,7 +15,7 @@ public class WebClientConfigTest {
         WebClientConfig config = new WebClientConfig();
 
         //act
-        WebClient.Builder builder = config.webClientBuild();
+        WebClient.Builder builder = config.webClientBuild(io.micrometer.observation.ObservationRegistry.create());
 
         //assert
         assertNotNull(builder, "WebClient.Builder should not be null");
