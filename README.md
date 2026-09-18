@@ -363,7 +363,9 @@ A Next.js + TypeScript + Tailwind + shadcn/ui frontend lives in `frontend/`.
 It wires the landing-page shorten form to the real `/shorten` API; the
 dashboard and analytics screens use mock data (no list/analytics/auth
 endpoint exists yet). See `frontend/README.md` for how to run it and what's
-real vs. mocked.
+real vs. mocked. Under Docker Compose and in the Helm chart it runs as its own
+container behind the gateway (`http://hopr.localhost/`), which is what applies
+the per-client rate limit to its server-side `/api/shorten` route.
 
 ---
 
@@ -434,6 +436,7 @@ Hopr/
 ├── settings.gradle.kts        # Gradle module declarations
 ├── .env.example               # Template for .env (non-secret local config; gitignored copy)
 ├── .env.secrets.example       # Template for .env.secrets (credentials; gitignored copy)
+├── .env.frontend.secrets.example  # Template for the frontend container's own credential file
 └── README.md
 ```
 
@@ -441,7 +444,7 @@ Hopr/
 
 ## Configuration Reference
 
-`.env.example` and `.env.secrets.example` are the authoritative list of variables and their
+`.env.example`, `.env.secrets.example` and `.env.frontend.secrets.example` are the authoritative list of variables and their
 defaults; copy them as shown above. The ones worth explaining:
 
 | Variable | File | Description |
@@ -451,7 +454,9 @@ defaults; copy them as shown above. The ones worth explaining:
 | `SCYLLA_DATACENTER` | `.env` | Driver's local datacenter, required for request routing |
 | `REDIS_NODE_1` ... `REDIS_NODE_6` | `.env` | Hostnames and ports for the 6 Redis Cluster nodes |
 | `SHORTENER_DOMAIN` | `.env` | Base domain prepended to generated short URLs |
+| `SHORTENER_API_KEY_HASHES` | `.env` | Comma-separated SHA-256 digests of the API keys accepted on `POST /shorten`; digests only, never the keys |
 | `REDIS_PASSWORD` | `.env.secrets` | Redis credential; empty locally, set for a deployed Redis |
+| `SHORTEN_API_KEY` | `.env.frontend.secrets` | Plaintext key the frontend's server-side `/api/shorten` route presents as `X-API-Key`; its digest must appear in `SHORTENER_API_KEY_HASHES` |
 
 Inter-service endpoints (Config Server, keygen) are not environment variables — they come from
 each service's `application.yml` and the Config Server's `config-repo/`.

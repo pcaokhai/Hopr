@@ -72,7 +72,8 @@ mirrors the Helm chart's `hopr-config` ConfigMap vs `hopr-secret` Secret — add
 whichever pair it belongs to, in both Compose and the chart. `DOCKER_COMPOSE_GUIDE.md` step 2
 is the setup instruction; a fresh clone without those copies fails `docker compose config`.
 
-All four service Dockerfiles run as the unprivileged `appuser` (uid 1001); the guide's step 6
+All five service Dockerfiles (the four Spring services plus `frontend/`) run as the
+unprivileged `appuser` (uid 1001); the guide's step 6
 has the command that verifies it.
 
 ## Tests

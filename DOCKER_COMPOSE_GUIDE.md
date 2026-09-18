@@ -121,12 +121,12 @@ docker compose logs -f api-gateway
 
 ### Step 6: Verify the Services Do Not Run as Root
 
-All four Spring Boot images create an unprivileged `appuser` (uid 1001) and switch to it with
+The four Spring Boot images and the `frontend` image create an unprivileged `appuser` (uid 1001) and switch to it with
 `USER`, so a container-breakout vulnerability lands as an unprivileged host user instead of
 host root. Confirm it after any Dockerfile change:
 
 ```bash
-for s in config-server keygen-service resolver-service shortener-service; do
+for s in config-server keygen-service resolver-service shortener-service frontend; do
   echo -n "$s: "; docker compose exec -T "$s" id -un
 done
 ```
