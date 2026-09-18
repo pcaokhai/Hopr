@@ -26,9 +26,10 @@ services:
       # gateway would spend the caller's rate-limit budget twice, once per hop.
       SHORTENER_API_BASE_URL: "http://shortener-service:8080"
     env_file:
-      # SHORTEN_API_KEY lives with the credentials, not in .env: it is a plaintext key,
-      # unlike the digests the service stores.
-      - .env.secrets
+      # Its own credential file rather than the shared .env.secrets, so the public-facing
+      # web tier's environment never carries backend credentials it has no use for. This
+      # is the Compose counterpart of the chart handing it a single secretKeyRef.
+      - .env.frontend.secrets
     depends_on:
       - shortener-service
     networks:

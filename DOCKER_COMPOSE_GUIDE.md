@@ -45,13 +45,14 @@ Because the Dockerfiles copy JARs directly from each service's `build/libs/` dir
 
 ---
 
-### Step 2: Create the Environment Files (`.env`, `.env.secrets`)
+### Step 2: Create the Environment Files (`.env`, `.env.secrets`, `.env.frontend.secrets`)
 
 Neither file is committed. Copy them from the templates on a fresh clone:
 
 ```bash
 cp .env.example .env
 cp .env.secrets.example .env.secrets
+cp .env.frontend.secrets.example .env.frontend.secrets
 ```
 
 The split mirrors the Helm chart, where non-secret configuration lives in the `hopr-config`
@@ -61,6 +62,7 @@ ConfigMap and credentials live in the `hopr-secret` Secret:
 | :--- | :--- | :--- |
 | `.env` | ScyllaDB contact points/keyspace, Redis node addresses, service ports, `SHORTENER_DOMAIN` | `templates/configmap.yaml` |
 | `.env.secrets` | `REDIS_PASSWORD` (empty locally — the Compose Redis cluster starts without `--requirepass`) | `templates/secret.yaml` |
+| `.env.frontend.secrets` | `SHORTEN_API_KEY` — the frontend's own credential, kept out of the shared secrets file so the public-facing tier holds nothing else | the single `secretKeyRef` in `templates/frontend.yaml` |
 
 Keep credentials out of `.env` and out of `docker-compose.yml` even when the local value is
 empty: how secrets are handled locally is how they end up being handled in production.

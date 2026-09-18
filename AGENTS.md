@@ -64,8 +64,10 @@ Local development key: `hopr-local-dev-key`.
 
 ## Local config and secrets
 
-`docker-compose.yml` reads `.env` (non-secret config) and `.env.secrets` (credentials); both are
-gitignored and created from the committed `.env.example` / `.env.secrets.example`. The split
+`docker-compose.yml` reads `.env` (non-secret config) and `.env.secrets` (credentials), plus
+`.env.frontend.secrets` for the frontend container alone -- it gets only its own
+`SHORTEN_API_KEY`, mirroring the chart's single `secretKeyRef`. All three are gitignored and
+created from the committed `.example` files. The split
 mirrors the Helm chart's `hopr-config` ConfigMap vs `hopr-secret` Secret — add a new variable to
 whichever pair it belongs to, in both Compose and the chart. `DOCKER_COMPOSE_GUIDE.md` step 2
 is the setup instruction; a fresh clone without those copies fails `docker compose config`.
