@@ -84,3 +84,19 @@ test("reports an unreachable backend as 502", async () => {
 
   assert.equal(res.status, 502);
 });
+
+test("rejects an oversized body with 413 without reaching upstream", async () => {
+  const calls = stubFetch(Response.json({}, { status: 201 }));
+  const { POST } = await import("./route.ts?" + Math.random());
+
+  const res = await POST(
+    new Request("http://localhost:3000/api/shorten", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": "12" },
+      body: JSON.stringify({ longUrl: "https://example.com/" + "a".repeat(64 * 1024) }),
+    }),
+  );
+
+  assert.equal(res.status, 413);
+  assert.equal(calls.length, 0);
+});

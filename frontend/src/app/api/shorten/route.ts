@@ -5,6 +5,38 @@
 const UPSTREAM_BASE_URL =
   process.env.SHORTENER_API_BASE_URL?.replace(/\/$/, "") ?? "http://hopr.localhost:80";
 
+// The payload is a URL plus an optional alias; anything larger is abuse, and buffering it whole
+// would let a single request exhaust the frontend process.
+const MAX_BODY_BYTES = 8 * 1024;
+
+async function readBoundedBody(request: Request): Promise<string | null> {
+  const reader = request.body?.getReader();
+  if (!reader) {
+    return "";
+  }
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    size += value.byteLength;
+    if (size > MAX_BODY_BYTES) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const joined = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(joined);
+}
+
 export async function POST(request: Request): Promise<Response> {
   const apiKey = process.env.SHORTEN_API_KEY;
   if (!apiKey) {
@@ -14,7 +46,13 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const body = await request.text();
+  const body = await readBoundedBody(request);
+  if (body === null) {
+    return Response.json(
+      { status: 413, message: "Request body is too large." },
+      { status: 413 },
+    );
+  }
 
   let upstream: Response;
   try {
