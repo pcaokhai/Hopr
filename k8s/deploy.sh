@@ -2,7 +2,8 @@
 # k8s/deploy.sh
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/.."
 
 if ! kind get clusters | grep -q '^hopr$'; then
   kind create cluster --config k8s/kind-config.yaml
@@ -11,7 +12,7 @@ fi
 # The chart ships no default key (shortener-service refuses to start on an empty hash list),
 # so mint a local development key once and reuse it on every re-run -- a fresh key each time
 # would invalidate the one already installed in the cluster.
-KEY_FILE="$(dirname "$0")/.dev-api-key"
+KEY_FILE="$SCRIPT_DIR/.dev-api-key"
 [ -f "$KEY_FILE" ] || (umask 077; openssl rand -hex 32 > "$KEY_FILE")
 chmod 600 "$KEY_FILE"
 SHORTEN_API_KEY=$(tr -d '\n' < "$KEY_FILE")
