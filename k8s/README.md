@@ -94,7 +94,9 @@ other.
 
 Non-secret values (Redis node list, Scylla contact points/keyspace/datacenter,
 ports, domain) live in `hopr-config` (a ConfigMap); credentials
-(`REDIS_PASSWORD`, `SHORTEN_API_KEY`) live in `hopr-secret`. Both are rendered from
+(`REDIS_PASSWORD`) live in `hopr-secret`, while the frontend's plaintext
+`SHORTEN_API_KEY` lives alone in `hopr-frontend-secret` so the backend pods,
+which consume `hopr-secret` wholesale, never carry a usable write key. Both are rendered from
 `k8s/hopr-chart/values.yaml` by the chart's `configmap.yaml` /
 `secret.yaml` templates — edit `values.yaml`, not the templates, to change
 a value.

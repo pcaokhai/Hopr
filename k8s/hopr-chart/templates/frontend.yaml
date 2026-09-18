@@ -32,7 +32,7 @@ spec:
             - name: SHORTEN_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: hopr-secret
+                  name: hopr-frontend-secret
                   key: SHORTEN_API_KEY
           readinessProbe:
             httpGet:

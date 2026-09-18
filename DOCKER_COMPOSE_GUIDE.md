@@ -62,7 +62,7 @@ ConfigMap and credentials live in the `hopr-secret` Secret:
 | :--- | :--- | :--- |
 | `.env` | ScyllaDB contact points/keyspace, Redis node addresses, service ports, `SHORTENER_DOMAIN` | `templates/configmap.yaml` |
 | `.env.secrets` | `REDIS_PASSWORD` (empty locally — the Compose Redis cluster starts without `--requirepass`) | `templates/secret.yaml` |
-| `.env.frontend.secrets` | `SHORTEN_API_KEY` — the frontend's own credential, kept out of the shared secrets file so the public-facing tier holds nothing else | the single `secretKeyRef` in `templates/frontend.yaml` |
+| `.env.frontend.secrets` | `SHORTEN_API_KEY` — the frontend's own credential, kept out of the shared secrets file so the public-facing tier holds nothing else | `templates/secret.yaml`'s `hopr-frontend-secret`, referenced by the single `secretKeyRef` in `templates/frontend.yaml` |
 
 Keep credentials out of `.env` and out of `docker-compose.yml` even when the local value is
 empty: how secrets are handled locally is how they end up being handled in production.
