@@ -5,6 +5,9 @@ metadata:
   namespace: {{ .Values.namespace }}
   annotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
+    # TLS terminates at the ingress controller, which then talks plain HTTP to the Services
+    # over the cluster network. Plain HTTP from outside is 308-redirected to HTTPS.
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     nginx.ingress.kubernetes.io/limit-rps: "5"
     nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
     nginx.ingress.kubernetes.io/enable-cors: "true"
@@ -13,6 +16,9 @@ metadata:
     nginx.ingress.kubernetes.io/cors-allow-headers: "Origin, X-Requested-With, Content-Type, Accept, Authorization"
 spec:
   ingressClassName: nginx
+  tls:
+    # No `hosts:` -- this is the catch-all certificate for an ingress with no host rules.
+    - secretName: hopr-tls
   rules:
     - http:
         paths:

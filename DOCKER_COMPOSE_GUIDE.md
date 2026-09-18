@@ -10,7 +10,7 @@ All services run inside a dedicated Docker bridge network (`hopr_default`):
 
 | Service Name | Container Name | Port (Host : Container) | Description |
 | :--- | :--- | :--- | :--- |
-| **`api-gateway`** | `hopr-api-gateway` | `80:80` | Nginx reverse proxy routing `/shorten` to `shortener-service` and `/{alias}` to `resolver-service`. Rate limited (5 req/s, burst 10). |
+| **`api-gateway`** | `hopr-api-gateway` | `80:80`, `443:443` | Nginx reverse proxy terminating TLS (`80` only `301`s to HTTPS) and routing `/shorten` to `shortener-service` and `/{alias}` to `resolver-service`. Rate limited (5 req/s, burst 10). |
 | **`config-server`** | `hopr-config-server` | - | Spring Cloud Config Server serving centralized configuration to the microservices (internal only, no host port published). |
 | **`keygen-service`** | `hopr-keygen-service` | `8081:8081` | Generates unique random keys for shortened URLs. |
 | **`shortener-service`** | `hopr-shortener-service` | `8080:8080` | Handles URL shortening requests, persists to ScyllaDB, caches in Redis, interacts with KeyGen. |
@@ -66,6 +66,19 @@ ConfigMap and credentials live in the `hopr-secret` Secret:
 
 Keep credentials out of `.env` and out of `docker-compose.yml` even when the local value is
 empty: how secrets are handled locally is how they end up being handled in production.
+
+Then mint the certificate the gateway serves HTTPS with — it is mounted into the container
+from `api-gateway/certs/`, and `docker compose up` fails without it:
+
+```bash
+./api-gateway/generate-dev-cert.sh
+```
+
+This certificate is **self-signed and for local development only**: nothing trusts it, so
+`curl` needs `-k` and a browser will show a warning you must click through ("Advanced" →
+"Proceed"). A real deployment must serve a CA-issued certificate — see
+[TLS in README.md](README.md#tls-transport-security) for what terminating TLS at the gateway
+means and what would change to issue a real certificate with cert-manager + Let's Encrypt.
 
 ---
 
@@ -168,7 +181,7 @@ It should show `Up` / `running` before the other microservices report healthy.
 Execute the cURL command:
 
 ```bash
-curl -v -X POST http://hopr.localhost/shorten \
+curl -vk -X POST https://hopr.localhost/shorten \
   -H "X-API-Key: hopr-local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{"longUrl": "https://example.com"}'
@@ -177,7 +190,7 @@ curl -v -X POST http://hopr.localhost/shorten \
 **Expected Response (HTTP 200 OK):**
 ```json
 {
-  "shortUrl": "http://hopr.localhost/WuMBdp2"
+  "shortUrl": "https://hopr.localhost/WuMBdp2"
 }
 ```
 *(The 7-character hash, e.g. `WuMBdp2`, will vary with each call).*
@@ -189,7 +202,7 @@ curl -v -X POST http://hopr.localhost/shorten \
 Provide an optional `alias` attribute to customize the shortened link:
 
 ```bash
-curl -v -X POST http://hopr.localhost/shorten \
+curl -vk -X POST https://hopr.localhost/shorten \
   -H "X-API-Key: hopr-local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{"longUrl": "https://github.com/pcaokhai/Hopr", "alias": "my-hopr-repo"}'
@@ -198,7 +211,7 @@ curl -v -X POST http://hopr.localhost/shorten \
 **Expected Response (HTTP 200 OK):**
 ```json
 {
-  "shortUrl": "http://hopr.localhost/my-hopr-repo"
+  "shortUrl": "https://hopr.localhost/my-hopr-repo"
 }
 ```
 
@@ -211,7 +224,7 @@ curl -v -X POST http://hopr.localhost/shorten \
 Use the key or custom alias returned from the previous step:
 
 ```bash
-curl -v http://hopr.localhost/my-hopr-repo
+curl -vk https://hopr.localhost/my-hopr-repo
 ```
 
 **Expected Response:**
@@ -222,7 +235,8 @@ curl -v http://hopr.localhost/my-hopr-repo
 ```
 
 **Browser Verification:**
-Paste `http://hopr.localhost/my-hopr-repo` into your web browser address bar. The browser should immediately redirect you to `https://github.com/pcaokhai/Hopr`.
+Paste `https://hopr.localhost/my-hopr-repo` into your web browser address bar (accept the
+self-signed certificate warning the first time). The browser should immediately redirect you to `https://github.com/pcaokhai/Hopr`.
 
 ---
 
@@ -279,7 +293,7 @@ docker exec hopr-redis-node-1 redis-cli -c -p 6379 keys "*"
 The API Gateway enforces a rate limit of 5 requests/sec with a burst allowance of 10 requests. Test this by firing 15 requests in rapid succession:
 
 ```bash
-for i in {1..15}; do curl -s -o /dev/null -w "%{http_code}\n" http://hopr.localhost/shorten -H "Content-Type: application/json" -d '{"longUrl": "https://example.com"}'; done
+for i in {1..15}; do curl -sk -o /dev/null -w "%{http_code}\n" https://hopr.localhost/shorten -H "Content-Type: application/json" -d '{"longUrl": "https://example.com"}'; done
 ```
 
 **Expected Result:** Initial requests return `200`, followed by `429 Too Many Requests` once the burst threshold is exceeded.

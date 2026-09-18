@@ -5,8 +5,13 @@ services:
     container_name: hopr-api-gateway
     volumes:
       - ./api-gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Self-signed dev certificate. Run ./api-gateway/generate-dev-cert.sh first;
+      # the directory is gitignored, so a fresh clone mints its own (see README "TLS").
+      - ./api-gateway/certs:/etc/nginx/certs:ro
     ports:
+      # 80 only redirects to 443; nothing is served in plaintext.
       - "80:80"
+      - "443:443"
     depends_on:
       - shortener-service
       - resolver-service

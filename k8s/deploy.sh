@@ -18,6 +18,19 @@ chmod 600 "$KEY_FILE"
 SHORTEN_API_KEY=$(tr -d '\n' < "$KEY_FILE")
 SHORTEN_API_KEY_HASH=$(printf %s "$SHORTEN_API_KEY" | shasum -a 256 | cut -d' ' -f1)
 
+# Self-signed TLS material for the ingress, minted once and reused (regenerating on every
+# run would hand clients a different cert each time). DEV ONLY -- nothing trusts it; a real
+# deployment issues this Secret through cert-manager instead. Both files are gitignored.
+CRT_FILE="$SCRIPT_DIR/.dev-tls.crt"
+KEY_FILE_TLS="$SCRIPT_DIR/.dev-tls.key"
+if [ ! -f "$CRT_FILE" ] || [ ! -f "$KEY_FILE_TLS" ]; then
+  (umask 077; openssl req -x509 -newkey rsa:2048 -nodes -days 825 -sha256 \
+    -keyout "$KEY_FILE_TLS" -out "$CRT_FILE" \
+    -subj "/CN=localhost/O=Hopr local development (self-signed, do not trust)" \
+    -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" 2>/dev/null)
+  chmod 644 "$CRT_FILE"
+fi
+
 kubectl create namespace hopr --dry-run=client -o yaml | kubectl apply -f -
 
 helm repo add bitnami https://charts.bitnami.com/bitnami >/dev/null 2>&1 || true
@@ -51,7 +64,8 @@ kubectl wait --namespace ingress-nginx \
 # URL services. On a re-run the release already exists and they are left running.
 if ! helm status hopr --namespace hopr >/dev/null 2>&1; then
   helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr --set urlServices.enabled=false \
-    --set shortenApiKey="$SHORTEN_API_KEY" --set config.shortenerApiKeyHashes="$SHORTEN_API_KEY_HASH"
+    --set shortenApiKey="$SHORTEN_API_KEY" --set config.shortenerApiKeyHashes="$SHORTEN_API_KEY_HASH" \
+    --set-file tls.crt="$CRT_FILE" --set-file tls.key="$KEY_FILE_TLS"
 fi
 
 kubectl rollout status statefulset/hopr-scylladb -n hopr --timeout=600s
@@ -66,7 +80,8 @@ done
 kill "$PF_PID" 2>/dev/null || true; trap - EXIT
 
 helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr \
-  --set shortenApiKey="$SHORTEN_API_KEY" --set config.shortenerApiKeyHashes="$SHORTEN_API_KEY_HASH"
+  --set shortenApiKey="$SHORTEN_API_KEY" --set config.shortenerApiKeyHashes="$SHORTEN_API_KEY_HASH" \
+  --set-file tls.crt="$CRT_FILE" --set-file tls.key="$KEY_FILE_TLS"
 
 kubectl rollout status deployment/config-server -n hopr --timeout=120s
 kubectl rollout status deployment/keygen-service -n hopr --timeout=120s
@@ -74,4 +89,5 @@ kubectl rollout status deployment/shortener-service -n hopr --timeout=120s
 kubectl rollout status deployment/resolver-service -n hopr --timeout=120s
 kubectl rollout status deployment/frontend -n hopr --timeout=120s
 
-echo "Hopr is up. Try: curl -X POST http://localhost:8888/shorten -d '{\"longUrl\":\"https://example.com\"}' -H 'Content-Type: application/json' -H \"X-API-Key: $SHORTEN_API_KEY\""
+# -k: the certificate above is self-signed, so no client trusts it without an override.
+echo "Hopr is up. Try: curl -k -X POST https://localhost:8443/shorten -d '{\"longUrl\":\"https://example.com\"}' -H 'Content-Type: application/json' -H \"X-API-Key: $SHORTEN_API_KEY\""

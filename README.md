@@ -36,6 +36,7 @@ Designed with clean architecture and domain-driven principles, Hopr eliminates c
   - [4. Verify Edge Rate Limiting](#4-verify-edge-rate-limiting)
   - [5. Interactive Swagger / OpenAPI UI](#5-interactive-swagger--openapi-ui)
 - [Frontend](#frontend)
+- [TLS (Transport Security)](#tls-transport-security)
 - [Quality Assurance & CI](#quality-assurance--ci)
 - [Architecture Decision Records (ADRs)](#architecture-decision-records-adrs)
 - [Project Directory Layout](#project-directory-layout)
@@ -110,7 +111,7 @@ sequenceDiagram
         Note over SS, DB: Not applied -> retry with a fresh key (bounded)
     end
     SS->>RC: Prime cache (key -> longUrl)
-    SS-->>GW: Return {"shortUrl": "http://hopr.localhost/WuMBdp2"}
+    SS-->>GW: Return {"shortUrl": "https://hopr.localhost/WuMBdp2"}
     GW-->>User: HTTP 200 OK
 
     Note over User, GW: Flow 2: Resolve & Redirect
@@ -134,7 +135,7 @@ sequenceDiagram
 
 | Service | Technology | Port | Description |
 | :--- | :--- | :--- | :--- |
-| **`api-gateway`** | Nginx | `80` | Edge reverse proxy, CORS preflight handler, and C-level rate limiter (5 req/s, burst 10). |
+| **`api-gateway`** | Nginx | `443` (`80` redirects) | TLS termination, edge reverse proxy, CORS preflight handler, and C-level rate limiter (5 req/s, burst 10). |
 | **`shortener-service`** | Spring Boot 4 / Java 25 | `8080` | URL shortening engine, alias validation, Redis cache priming, and ScyllaDB persistence. |
 | **`resolver-service`** | Spring Boot 4 / Java 25 | `8083` | High-performance resolution engine returning `HTTP 307 Temporary Redirect` via Redis Cluster & ScyllaDB. |
 | **`keygen-service`** | Spring Boot 4 / Java 25 | `8081` | Dedicated worker generating 64-bit Snowflake IDs encoded into Base62 URL slugs. |
@@ -193,6 +194,10 @@ cd Hopr
 cp .env.example .env
 cp .env.secrets.example .env.secrets
 
+# Mint the self-signed certificate the gateway serves HTTPS with. Certificates and private
+# keys are never committed, so every clone generates its own. See "TLS" below.
+./api-gateway/generate-dev-cert.sh
+
 # Build executable JARs (skip unit tests for fast build)
 ./gradlew bootJar -x test
 ```
@@ -218,7 +223,7 @@ This command will:
 2. Spin up **6 Redis nodes** and execute the one-shot `redis-cluster-init` container to form the cluster.
 3. Start the **Config Server** and wait for it to be ready.
 4. Launch **`keygen-service`**, **`shortener-service`**, and **`resolver-service`**.
-5. Launch the **`api-gateway`** reverse proxy on port `80`.
+5. Launch the **`api-gateway`** reverse proxy on ports `443` (HTTPS) and `80` (redirect only).
 
 #### Step 4: Verify Container Health
 
@@ -252,7 +257,11 @@ For in-depth Kubernetes documentation, values overrides, and cluster architectur
 
 ## API Reference & Testing Guide
 
-All client requests enter through the Nginx Edge Gateway at `http://hopr.localhost/`.
+All client requests enter through the Nginx Edge Gateway at `https://hopr.localhost/` over
+HTTPS. Plain `http://` is answered with a `301` to the same URL on HTTPS and serves nothing
+itself. The gateway's certificate is **self-signed** in local development, so every `curl`
+below passes `-k` and a browser will show a warning you have to click through — see
+[TLS](#tls-transport-security) for why, and for what a real deployment does instead.
 
 ### 1. Shorten a URL (Auto-Generated Key)
 
@@ -272,7 +281,7 @@ All client requests enter through the Nginx Edge Gateway at `http://hopr.localho
 > violations.
 
 ```bash
-curl -v -X POST http://hopr.localhost/shorten \
+curl -vk -X POST https://hopr.localhost/shorten \
   -H "X-API-Key: hopr-local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{"longUrl": "https://github.com/pcaokhai/Hopr"}'
@@ -281,7 +290,7 @@ curl -v -X POST http://hopr.localhost/shorten \
 **Response (HTTP 200 OK):**
 ```json
 {
-  "shortUrl": "http://hopr.localhost/8zK1x9P"
+  "shortUrl": "https://hopr.localhost/8zK1x9P"
 }
 ```
 
@@ -290,7 +299,7 @@ curl -v -X POST http://hopr.localhost/shorten \
 ### 2. Shorten a URL with Custom Alias
 
 ```bash
-curl -v -X POST http://hopr.localhost/shorten \
+curl -vk -X POST https://hopr.localhost/shorten \
   -H "X-API-Key: hopr-local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -302,7 +311,7 @@ curl -v -X POST http://hopr.localhost/shorten \
 **Response (HTTP 200 OK):**
 ```json
 {
-  "shortUrl": "http://hopr.localhost/spring-home"
+  "shortUrl": "https://hopr.localhost/spring-home"
 }
 ```
 
@@ -315,7 +324,7 @@ curl -v -X POST http://hopr.localhost/shorten \
 Use the generated key or alias:
 
 ```bash
-curl -v http://hopr.localhost/spring-home
+curl -vk https://hopr.localhost/spring-home
 ```
 
 **Response:**
@@ -326,7 +335,7 @@ curl -v http://hopr.localhost/spring-home
 < Content-Length: 0
 ```
 
-*Or paste `http://hopr.localhost/spring-home` directly into your web browser to verify automatic redirection.*
+*Or paste `https://hopr.localhost/spring-home` directly into your web browser to verify automatic redirection.*
 
 ---
 
@@ -336,8 +345,8 @@ The API Gateway enforces rate limiting of **5 requests/second with a burst of 10
 
 ```bash
 for i in {1..15}; do
-  curl -s -o /dev/null -w "Request $i: HTTP %{http_code}\n" \
-    -X POST http://hopr.localhost/shorten \
+  curl -sk -o /dev/null -w "Request $i: HTTP %{http_code}\n" \
+    -X POST https://hopr.localhost/shorten \
     -H "X-API-Key: hopr-local-dev-key" \
     -H "Content-Type: application/json" \
     -d '{"longUrl": "https://example.com"}'
@@ -364,8 +373,76 @@ It wires the landing-page shorten form to the real `/shorten` API; the
 dashboard and analytics screens use mock data (no list/analytics/auth
 endpoint exists yet). See `frontend/README.md` for how to run it and what's
 real vs. mocked. Under Docker Compose and in the Helm chart it runs as its own
-container behind the gateway (`http://hopr.localhost/`), which is what applies
+container behind the gateway (`https://hopr.localhost/`), which is what applies
 the per-client rate limit to its server-side `/api/shorten` route.
+
+---
+
+## TLS (Transport Security)
+
+### What the gateway does
+
+The Nginx gateway is the **TLS termination point**: it is the only component that holds the
+certificate and its private key. It accepts HTTPS on `443`, decrypts the request, and forwards
+it as plain HTTP to `shortener-service`, `resolver-service` or `frontend` over the private
+Docker/Kubernetes network. Port `80` holds no routes at all — it answers every path with a
+`301` to the `https://` URL, so nothing (including the `X-API-Key` header on `POST /shorten`)
+can travel in cleartext to a service.
+
+Terminating at the edge and proxying plaintext inward is the normal pattern, not a hole. The
+plaintext hop never crosses an untrusted network — it stays inside one container network /
+cluster — and centralizing the key means one component to rotate, patch and audit instead of
+five. (When that internal network *is* untrusted — multi-tenant clusters, traffic crossing
+availability zones — you add mutual TLS between services on top, which is a separate concern
+from edge termination.)
+
+The HTTPS server also sets the headers that only make sense over TLS:
+
+| Header | Purpose |
+| :--- | :--- |
+| `Strict-Transport-Security: max-age=31536000; includeSubDomains` | Tells the browser never to try `http://` for this host again, closing the one-request window the `301` leaves open. |
+| `X-Content-Type-Options: nosniff` | Stops the browser from guessing a content type. |
+| `X-Frame-Options: DENY` | Blocks framing / clickjacking. |
+| `Referrer-Policy: strict-origin-when-cross-origin` | Keeps short-link paths out of third-party referrers. |
+
+### The certificate here is self-signed — dev only
+
+`./api-gateway/generate-dev-cert.sh` mints a self-signed certificate into
+`api-gateway/certs/` (gitignored; `k8s/deploy.sh` mints an equivalent pair for the cluster and
+feeds it to the `hopr-tls` Secret). Self-signed means the certificate vouches for itself:
+no certificate authority any browser or client trusts has signed it. So clients refuse it
+until you override:
+
+```bash
+curl -k https://hopr.localhost/         # -k = "don't verify the chain"
+```
+
+In a browser: "Advanced" → "Proceed to hopr.localhost (unsafe)".
+
+That is fine for a learning/local deployment — the traffic is still encrypted, and you are
+the only party involved. It is **never acceptable for a real public deployment**: a user
+cannot tell your self-signed certificate from an attacker's, so training them to click
+through the warning destroys the only signal that would flag a real machine-in-the-middle.
+"Encrypted" and "authenticated as the right server" are two separate guarantees, and a
+self-signed certificate only gives you the first.
+
+### Future concept: a real certificate via cert-manager + Let's Encrypt
+
+Not built here — this project has no registered domain to issue a certificate for. When it
+does, the change is small, because the `hopr-tls` Secret the Ingress already references is
+exactly what cert-manager produces:
+
+1. Install cert-manager and create a `ClusterIssuer` for Let's Encrypt (ACME) using the
+   HTTP-01 challenge, which the existing ingress-nginx controller already serves.
+2. Give the Ingress a real host rule (`host: hopr.example.com`) and add
+   `cert-manager.io/cluster-issuer: letsencrypt-prod` plus that host under `tls.hosts`.
+3. Delete the self-signed generation from `k8s/deploy.sh` and the `tls.crt`/`tls.key` values
+   — cert-manager creates and renews `hopr-tls` itself, every 60 days, with no human step.
+4. Point DNS at the ingress, so Let's Encrypt can reach the challenge and prove you control
+   the domain — the step a self-signed certificate skips, and the whole reason clients trust
+   the result.
+
+Nothing in `ingress.yaml` beyond the host name changes; the Ingress reads the same Secret.
 
 ---
 
@@ -417,7 +494,8 @@ Key architectural decisions are documented to preserve design rationale:
 ```
 Hopr/
 ├── .github/workflows/         # GitHub Actions CI pipelines (Java 25)
-├── api-gateway/               # Nginx configuration (routing, rate limit, CORS)
+├── api-gateway/               # Nginx config (TLS termination, routing, rate limit, CORS)
+│                              # + generate-dev-cert.sh for the self-signed dev cert
 │   └── nginx.conf
 ├── common/                    # Shared library (domain models, DTOs)
 ├── config-server/             # Spring Cloud Config Server (native repo)
