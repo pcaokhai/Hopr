@@ -13,6 +13,14 @@ for how to run it and exactly which screens are wired to the real `/shorten` API
 (not Radix) — components use the `render` prop for polymorphism, not `asChild`, and a `Button` wrapping a
 non-native element (e.g. a `next/link`) needs `nativeButton={false}` or Base UI logs an a11y warning.
 
+The browser never holds the API key: the shorten form posts same-origin to
+`frontend/src/app/api/shorten/route.ts`, which attaches `X-API-Key` server-side. That route is
+reachable only through the gateway (`api-gateway/nginx.conf` proxies `/api/`, `/_next/`, `/`
+and `/dashboard` to the `frontend` container), which is what rate-limits it per client address —
+a Next.js route handler is given no connection address, so it cannot do that itself.
+`api-gateway/rate-limit-test.sh` drives the real config in docker to prove both the limit and
+that `/shorten` and the redirect regex still reach their own services.
+
 ## Database schema
 
 ScyllaDB schema lives in `db-migration/` as Flyway CQL migrations — see `db-migration/README.md`
@@ -44,15 +52,28 @@ explicitly or the shortener->keygen hop starts a fresh trace. Both are covered b
 `TracePropagationIntegrationTest` (shortener) and `TraceContinuationIntegrationTest` (resolver);
 sampling and endpoint exposure live in `config-server/src/main/resources/config-repo/`.
 
+## API keys
+
+`POST /shorten` requires an `X-API-Key` header; the resolver's redirect path is deliberately
+public and must stay that way. Validation lives in `shortener-service`'s `security` package: the
+filter is registered against the `/shorten` URL pattern only (a bare `@Component` filter would map
+to `/*` and break actuator probes). Only SHA-256 digests of accepted keys are configured
+(`shortener.api-key.hashes` / `SHORTENER_API_KEY_HASHES`), which is why they live in non-secret
+config (`.env`, the chart's ConfigMap) rather than `.env.secrets` — a digest cannot be replayed.
+Local development key: `hopr-local-dev-key`.
+
 ## Local config and secrets
 
-`docker-compose.yml` reads `.env` (non-secret config) and `.env.secrets` (credentials); both are
-gitignored and created from the committed `.env.example` / `.env.secrets.example`. The split
+`docker-compose.yml` reads `.env` (non-secret config) and `.env.secrets` (credentials), plus
+`.env.frontend.secrets` for the frontend container alone -- it gets only its own
+`SHORTEN_API_KEY`, mirroring the chart's single `secretKeyRef`. All three are gitignored and
+created from the committed `.example` files. The split
 mirrors the Helm chart's `hopr-config` ConfigMap vs `hopr-secret` Secret — add a new variable to
 whichever pair it belongs to, in both Compose and the chart. `DOCKER_COMPOSE_GUIDE.md` step 2
 is the setup instruction; a fresh clone without those copies fails `docker compose config`.
 
-All four service Dockerfiles run as the unprivileged `appuser` (uid 1001); the guide's step 6
+All five service Dockerfiles (the four Spring services plus `frontend/`) run as the
+unprivileged `appuser` (uid 1001); the guide's step 6
 has the command that verifies it.
 
 ## Tests

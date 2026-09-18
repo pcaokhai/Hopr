@@ -16,6 +16,32 @@ spec:
   rules:
     - http:
         paths:
+          # The frontend sits behind this ingress so its /api/shorten route -- which holds
+          # the server-side API key -- is rate limited per real client address by the
+          # limit-rps annotation above. The redirect regex below is anchored and excludes
+          # these prefixes, so it cannot claim them; /shorten keeps its Exact path and the
+          # `/` Prefix fallback still goes to shortener-service.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: {{ .Values.config.frontendPort }}
+          - path: /dashboard
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: {{ .Values.config.frontendPort }}
+          - path: /
+            pathType: Exact
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: {{ .Values.config.frontendPort }}
           - path: /shorten
             pathType: Exact
             backend:
@@ -23,11 +49,14 @@ spec:
                 name: shortener-service
                 port:
                   number: {{ .Values.config.shortenerServerPort }}
-          # ponytail: negative lookahead excludes "shorten" so this regex (sorted
-          # ahead of the exact /shorten path by ingress-nginx's use-regex length-based
-          # ordering) can't shadow it. Upgrade path: split into two Ingress objects
-          # (one Exact, one regex) if more reserved literal paths are added later.
-          - path: /(?!shorten$)[a-zA-Z0-9_-]{4,}
+          # ponytail: a regex location is evaluated before every prefix location, so this
+          # has to exclude the reserved literals itself. Anchored at both ends like the
+          # gateway's `^/[a-zA-Z0-9_-]{4,}$`: without the leading `^` it would claim
+          # `/dashboard/<slug>` by matching a segment mid-path, and without the trailing `$`
+          # it would claim every frontend asset under `/_next/`. The lookahead covers the
+          # slash-free literals the anchors cannot. Upgrade path: split into two Ingress objects (one Exact,
+          # one regex) if more reserved literal paths are added later.
+          - path: ^/(?!shorten$|dashboard$)[a-zA-Z0-9_-]{4,}$
             pathType: ImplementationSpecific
             backend:
               service:

@@ -45,13 +45,14 @@ Because the Dockerfiles copy JARs directly from each service's `build/libs/` dir
 
 ---
 
-### Step 2: Create the Environment Files (`.env`, `.env.secrets`)
+### Step 2: Create the Environment Files (`.env`, `.env.secrets`, `.env.frontend.secrets`)
 
 Neither file is committed. Copy them from the templates on a fresh clone:
 
 ```bash
 cp .env.example .env
 cp .env.secrets.example .env.secrets
+cp .env.frontend.secrets.example .env.frontend.secrets
 ```
 
 The split mirrors the Helm chart, where non-secret configuration lives in the `hopr-config`
@@ -61,6 +62,7 @@ ConfigMap and credentials live in the `hopr-secret` Secret:
 | :--- | :--- | :--- |
 | `.env` | ScyllaDB contact points/keyspace, Redis node addresses, service ports, `SHORTENER_DOMAIN` | `templates/configmap.yaml` |
 | `.env.secrets` | `REDIS_PASSWORD` (empty locally — the Compose Redis cluster starts without `--requirepass`) | `templates/secret.yaml` |
+| `.env.frontend.secrets` | `SHORTEN_API_KEY` — the frontend's own credential, kept out of the shared secrets file so the public-facing tier holds nothing else | `templates/secret.yaml`'s `hopr-frontend-secret`, referenced by the single `secretKeyRef` in `templates/frontend.yaml` |
 
 Keep credentials out of `.env` and out of `docker-compose.yml` even when the local value is
 empty: how secrets are handled locally is how they end up being handled in production.
@@ -119,12 +121,12 @@ docker compose logs -f api-gateway
 
 ### Step 6: Verify the Services Do Not Run as Root
 
-All four Spring Boot images create an unprivileged `appuser` (uid 1001) and switch to it with
+The four Spring Boot images and the `frontend` image create an unprivileged `appuser` (uid 1001) and switch to it with
 `USER`, so a container-breakout vulnerability lands as an unprivileged host user instead of
 host root. Confirm it after any Dockerfile change:
 
 ```bash
-for s in config-server keygen-service resolver-service shortener-service; do
+for s in config-server keygen-service resolver-service shortener-service frontend; do
   echo -n "$s: "; docker compose exec -T "$s" id -un
 done
 ```
@@ -155,12 +157,19 @@ It should show `Up` / `running` before the other microservices report healthy.
 
 ### Test 2: Shorten a URL (Random Key)
 
+> 🔑 **API key required:** `POST /shorten` needs an `X-API-Key` header, or it answers `401
+> Unauthorized`. `.env.example` ships `SHORTENER_API_KEY_HASHES` set to the SHA-256 digest of the
+> local development key `hopr-local-dev-key`, so a fresh `cp .env.example .env` works with the
+> commands below. Only digests are configured — replace the digest (and the key you hand clients)
+> for anything beyond local use. `GET /{shortKey}` redirects remain public and unauthenticated.
+
 > ⚠️ **CRITICAL REQUIREMENT:** The request payload must use the JSON key `longUrl` (do **not** use `url`).
 
 Execute the cURL command:
 
 ```bash
 curl -v -X POST http://hopr.localhost/shorten \
+  -H "X-API-Key: hopr-local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{"longUrl": "https://example.com"}'
 ```
@@ -181,6 +190,7 @@ Provide an optional `alias` attribute to customize the shortened link:
 
 ```bash
 curl -v -X POST http://hopr.localhost/shorten \
+  -H "X-API-Key: hopr-local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{"longUrl": "https://github.com/pcaokhai/Hopr", "alias": "my-hopr-repo"}'
 ```

@@ -38,6 +38,8 @@ Thumbs.db
 # ...but the templates a fresh clone needs are committed (they hold no real credentials)
 !.env.example
 !.env.secrets.example
+!.env.frontend.secrets.example
+k8s/.dev-api-key
 stack.override.yml
 data/
 

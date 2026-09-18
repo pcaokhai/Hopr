@@ -1,0 +1,31 @@
+# Static assets live on their own Ingress because the rate limit annotations are per-Ingress:
+# a single page load fires one HTML request plus a burst of chunks from the same address, which
+# would exhaust a limit sized for the write path. Matches exactly what the frontend serves --
+# /_next/ and its root-level assets -- so no other path can dodge the limit through it.
+# /shorten and /api keep their limit on the main Ingress, unchanged.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hopr-static-ingress
+  namespace: {{ .Values.namespace }}
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: ^/_next/
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: {{ .Values.config.frontendPort }}
+          - path: ^/(?:favicon\.ico|file\.svg|globe\.svg|next\.svg|vercel\.svg|window\.svg)$
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: {{ .Values.config.frontendPort }}

@@ -103,7 +103,7 @@ class TracePropagationIntegrationTest extends BaseIntegrationTest {
         String body = objectMapper.writeValueAsString(
                 new ShortenRequest("https://example.com/traced", null));
 
-        mockMvc.perform(post("/shorten")
+        mockMvc.perform(post("/shorten").header("X-API-Key", "test-api-key")
                         .header("traceparent", inbound)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))

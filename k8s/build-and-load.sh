@@ -12,4 +12,8 @@ for service in config-server keygen-service shortener-service resolver-service; 
   kind load docker-image "hopr/$service:local" --name hopr
 done
 
+echo "Building image for frontend..."
+docker build -t "hopr/frontend:local" frontend/
+kind load docker-image "hopr/frontend:local" --name hopr
+
 echo "All images built and loaded into kind cluster 'hopr'."

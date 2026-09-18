@@ -113,7 +113,7 @@ class KeygenResilienceIntegrationTest extends BaseIntegrationTest {
     private long callShorten(CircuitBreaker breaker) throws Exception {
         String body = objectMapper.writeValueAsString(new ShortenRequest("https://example.com/a-long-url", null));
         long start = System.nanoTime();
-        MvcResult result = mockMvc.perform(post("/shorten")
+        MvcResult result = mockMvc.perform(post("/shorten").header("X-API-Key", "test-api-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andReturn();

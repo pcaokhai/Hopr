@@ -22,21 +22,25 @@ kind cluster "hopr"
          ├─ Deployment/Service: config-server         (port 8888)
          ├─ Deployment/Service: keygen-service        (port 8081)
          ├─ Deployment/Service: shortener-service     (port 8080)
-         └─ Deployment/Service: resolver-service       (port 8083)
+         ├─ Deployment/Service: resolver-service       (port 8083)
+         └─ Deployment/Service: frontend               (port 3000)
      └─ ingress-nginx (installed separately via upstream manifest)
-         └─ Ingress: hopr-ingress — routes /shorten and / to shortener-service,
-                     everything else to resolver-service
+         ├─ Ingress: hopr-ingress — /, /dashboard and /api to the frontend,
+         │           /shorten to shortener-service, short keys to
+         │           resolver-service, everything else to shortener-service
+         └─ Ingress: hopr-static-ingress — /_next/ and root-level static assets
+                     to the frontend, outside the rate limit
 ```
 
 App images (`hopr/config-server`, `hopr/keygen-service`,
-`hopr/shortener-service`, `hopr/resolver-service`) are built locally from the
+`hopr/shortener-service`, `hopr/resolver-service`, `hopr/frontend`) are built locally from the
 existing Dockerfiles and loaded straight into the `kind` node with `kind load
 docker-image` — `imagePullPolicy: Never` everywhere, no image registry
 involved. The gateway is no longer a hand-rolled nginx pod in the app chart —
 `deploy.sh` installs the upstream `ingress-nginx` controller into the cluster,
 and `k8s/hopr-chart/templates/ingress.yaml` defines a native Kubernetes
 `Ingress` resource that the controller reads to route traffic to
-`shortener-service` and `resolver-service`.
+`shortener-service`, `resolver-service` and the `frontend`.
 
 ## File Layout
 
@@ -45,19 +49,24 @@ k8s/
   kind-config.yaml          kind cluster definition (1 node, port mapping)
   build-and-load.sh         builds jars + docker images, loads them into kind
   deploy.sh                 full deploy: cluster, Redis, app chart, rollout wait
-  hopr-chart/                Helm chart for ScyllaDB + all 4 app services + Ingress
+  hopr-chart/                Helm chart for ScyllaDB + the 4 app services + frontend + Ingress
     Chart.yaml
     values.yaml              all tunable values (ports, image tag, scylla/redis config)
     templates/
       configmap.yaml          non-secret env vars (Redis nodes, ports...)
-      secret.yaml             REDIS_PASSWORD
+      secret.yaml             REDIS_PASSWORD (hopr-secret) + SHORTEN_API_KEY
+                              (hopr-frontend-secret, frontend only)
       scylladb.yaml           ScyllaDB StatefulSet + headless Service
       config-server.yaml      Config Server Deployment + Service (port 8888)
       keygen-service.yaml     keygen-service Deployment + Service
       shortener-service.yaml  shortener-service Deployment + Service
       resolver-service.yaml   resolver-service Deployment + Service
+      frontend.yaml           Next.js frontend Deployment + Service (port 3000)
       ingress.yaml            Ingress resource routing to shortener-service /
-                              resolver-service via the ingress-nginx controller
+                              resolver-service / frontend via the ingress-nginx
+                              controller
+      ingress-static.yaml     second Ingress for the frontend's static assets,
+                              exempt from the write-path rate limit
 ```
 
 ## Why Helm for the app layer, and why ScyllaDB isn't a Bitnami chart
@@ -94,7 +103,9 @@ other.
 
 Non-secret values (Redis node list, Scylla contact points/keyspace/datacenter,
 ports, domain) live in `hopr-config` (a ConfigMap); credentials
-(`REDIS_PASSWORD`) live in `hopr-secret`. Both are rendered from
+(`REDIS_PASSWORD`) live in `hopr-secret`, while the frontend's plaintext
+`SHORTEN_API_KEY` lives alone in `hopr-frontend-secret` so the backend pods,
+which consume `hopr-secret` wholesale, never carry a usable write key. Both are rendered from
 `k8s/hopr-chart/values.yaml` by the chart's `configmap.yaml` /
 `secret.yaml` templates — edit `values.yaml`, not the templates, to change
 a value.
@@ -145,13 +156,23 @@ This will, in order:
 1. Create the `kind` cluster `hopr` if it doesn't already exist
    (`k8s/kind-config.yaml` maps the node's container port 80 → host port
    **8888**, and labels the node `ingress-ready=true` for `ingress-nginx`).
-2. Create the `hopr` namespace.
+2. Create the `hopr` namespace, and mint a local development API key for
+   `POST /shorten` into the gitignored `k8s/.dev-api-key` if it does not exist
+   yet (reused on re-runs, so a redeploy never invalidates the key already in
+   the cluster). Both Helm invocations below get it via
+   `--set shortenApiKey=<key> --set config.shortenerApiKeyHashes=<sha256>`.
+   The chart's own defaults stay empty on purpose — `shortener-service`
+   refuses to start on an empty hash list, so nothing deploys with a key
+   published in this repo. For anything beyond local development, pass your
+   own key and its digest on those two `--set` flags instead:
+   `KEY=$(openssl rand -hex 32); printf %s "$KEY" | shasum -a 256`.
 3. `helm upgrade --install hopr-redis bitnami/redis-cluster` (6 nodes,
    `bitnamilegacy/*` images — see note below).
 4. Install the upstream `ingress-nginx` controller and wait for it to
    become ready.
-5. Build all 4 app jars with Gradle, build their Docker images, and
-   `kind load docker-image` them into the cluster (`k8s/build-and-load.sh`).
+5. Build all 4 app jars with Gradle, build their Docker images plus the
+   frontend image, and `kind load docker-image` them into the cluster
+   (`k8s/build-and-load.sh`).
 6. On a fresh install only (no existing `hopr` Helm release):
    `helm upgrade --install hopr ./k8s/hopr-chart --set urlServices.enabled=false`
    — deploys ScyllaDB, `config-server`, `keygen-service`, and the `Ingress`
@@ -229,9 +250,13 @@ Expected: each prints JSON with `"status":"UP"` — `shortener-service` and
 
 ```bash
 curl -s -X POST http://localhost:8888/shorten \
+  -H "X-API-Key: $(cat k8s/.dev-api-key)" \
   -H 'Content-Type: application/json' \
   -d '{"longUrl":"https://example.com"}'
 ```
+
+`POST /shorten` rejects a request without a valid `X-API-Key` with `401`; the key is
+the one `deploy.sh` minted into `k8s/.dev-api-key`. Redirects stay public.
 
 **Important:** the request body field is `longUrl`, not `url` — this is
 the exact field name `ShortenRequest` (in `common/src/main/java/.../dto/

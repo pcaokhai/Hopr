@@ -98,7 +98,7 @@ class AliasRaceIntegrationTest extends BaseIntegrationTest {
     @Test
     void generatedKeyCollidingWithAnExistingAlias_doesNotOverwriteIt() throws Exception {
         String claimed = "https://example.com/claimed";
-        mockMvc.perform(post("/shorten")
+        mockMvc.perform(post("/shorten").header("X-API-Key", "test-api-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ShortenRequest(claimed, ALIAS))))
                 .andReturn();
@@ -106,7 +106,7 @@ class AliasRaceIntegrationTest extends BaseIntegrationTest {
         // keygen hands out a key that a custom alias already owns, then a free one.
         when(keyGenClient.generateKey()).thenReturn(ALIAS, "freekey");
 
-        int status = mockMvc.perform(post("/shorten")
+        int status = mockMvc.perform(post("/shorten").header("X-API-Key", "test-api-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ShortenRequest("https://example.com/generated", null))))
                 .andReturn().getResponse().getStatus();
@@ -121,7 +121,7 @@ class AliasRaceIntegrationTest extends BaseIntegrationTest {
     private int shorten(CyclicBarrier barrier, String longUrl) {
         try {
             barrier.await();
-            return mockMvc.perform(post("/shorten")
+            return mockMvc.perform(post("/shorten").header("X-API-Key", "test-api-key")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(new ShortenRequest(longUrl, ALIAS))))
                     .andReturn().getResponse().getStatus();
