@@ -9,8 +9,8 @@ set -euo pipefail
 
 CHART="$(cd "$(dirname "$0")" && pwd)"
 
-helm template "$CHART" --show-only templates/ingress.yaml \
-  | docker run --rm -i mikefarah/yq -o=json \
+helm template "$CHART" --show-only templates/ingress.yaml --show-only templates/ingress-static.yaml \
+  | docker run --rm -i mikefarah/yq -o=json -N ea '[.]' \
   | python3 -c '
 import json, re, sys
 
@@ -18,6 +18,7 @@ expected = {
     "/": "frontend",
     "/api/shorten": "frontend",
     "/_next/static/chunks/main-abc123.js": "frontend",
+    "/favicon.ico": "frontend",
     "/dashboard": "frontend",
     "/dashboard/my-link": "frontend",
     "/shorten": "shortener-service",
@@ -25,9 +26,22 @@ expected = {
     "/my-link_1": "resolver-service",
 }
 
+docs = json.load(sys.stdin)
+ingresses = {d["metadata"]["name"]: d for d in docs}
+
+# Static assets must not carry the write-path rate limit: one page load is a burst of chunks.
+limited = {
+    name: "nginx.ingress.kubernetes.io/limit-rps" in (d["metadata"].get("annotations") or {})
+    for name, d in ingresses.items()
+}
+if limited.get("hopr-static-ingress") is not False or limited.get("hopr-ingress") is not True:
+    sys.exit("FAIL: rate limit annotations on the wrong Ingress: %s" % limited)
+
+# ingress-nginx evaluates every Ingress for the host as one merged set of locations.
 paths = [
     (p["path"], p["pathType"], p["backend"]["service"]["name"])
-    for rule in json.load(sys.stdin)["spec"]["rules"]
+    for d in docs
+    for rule in d["spec"]["rules"]
     for p in rule["http"]["paths"]
 ]
 

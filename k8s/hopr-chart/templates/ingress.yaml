@@ -28,13 +28,6 @@ spec:
                 name: frontend
                 port:
                   number: {{ .Values.config.frontendPort }}
-          - path: /_next
-            pathType: Prefix
-            backend:
-              service:
-                name: frontend
-                port:
-                  number: {{ .Values.config.frontendPort }}
           - path: /dashboard
             pathType: Prefix
             backend:

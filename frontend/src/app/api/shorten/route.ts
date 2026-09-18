@@ -1,7 +1,6 @@
 // Server-only: the API key never reaches the browser. A NEXT_PUBLIC_ variable is inlined into
 // the client bundle and readable by anyone who opens devtools, which would make the key
 // pointless as an abuse control -- so the browser posts here and this route adds the header.
-export const dynamic = "force-dynamic";
 
 const UPSTREAM_BASE_URL =
   process.env.SHORTENER_API_BASE_URL?.replace(/\/$/, "") ?? "http://hopr.localhost:80";

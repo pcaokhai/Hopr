@@ -65,5 +65,20 @@ for check in "192.168.210.52 /shorten shortener-service -XPOST" "192.168.210.53 
   [[ "$got" == "$expected"* ]] || fail "$path reached '$got', expected $expected"
 done
 
+# A normal page load is one HTML request plus a burst of static assets from one address.
+# None of it may be rejected, while the same address must still be limited on /shorten.
+page=192.168.210.56
+burst=$(docker run --rm --network "$NET" --ip "$page" curlimages/curl:latest \
+  sh -c 'curl -s -o /dev/null -w "%{http_code}\n" http://'"$GATEWAY"'/; for i in $(seq 1 30); do curl -s -o /dev/null -w "%{http_code}\n" http://'"$GATEWAY"'/_next/static/chunks/main-$i.js; done; curl -s -o /dev/null -w "%{http_code}\n" http://'"$GATEWAY"'/favicon.ico')
+! grep -q 429 <<<"$burst" || fail "a normal page load was rate limited: $(tr '\n' ' ' <<<"$burst")"
+
+asset=$(call "$page" /favicon.ico)
+[[ "$asset" == frontend* ]] || fail "/favicon.ico did not reach the frontend: $asset"
+
+write_statuses=$(docker run --rm --network "$NET" --ip "$page" curlimages/curl:latest \
+  sh -c 'for i in $(seq 1 25); do curl -s -o /dev/null -w "%{http_code}\n" -X POST http://'"$GATEWAY"'/shorten -d "{}"; done')
+grep -q 429 <<<"$write_statuses" || fail "/shorten was not rate limited after the page load: $(tr '\n' ' ' <<<"$write_statuses")"
+
 echo "rate limited $rejected of 25 requests from one address; other addresses and all routes still served"
+echo "a 32-request page load from one address was not rate limited; /shorten from it still was"
 echo "PASS"
