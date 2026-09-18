@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: "hopr/frontend:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.config.frontendPort }}
+          env:
+            # Talks to shortener-service directly: routing the internal hop back through
+            # the ingress would spend the caller's rate-limit budget twice, once per hop.
+            - name: SHORTENER_API_BASE_URL
+              value: "http://shortener-service:{{ .Values.config.shortenerServerPort }}"
+            - name: SHORTEN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: hopr-secret
+                  key: SHORTEN_API_KEY
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.config.frontendPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.config.frontendPort }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: frontend
+  ports:
+    - port: {{ .Values.config.frontendPort }}
+      targetPort: {{ .Values.config.frontendPort }}

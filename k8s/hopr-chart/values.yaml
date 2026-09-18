@@ -36,6 +36,10 @@ redis:
   timeout: "6000"
   nodeCount: 6
 
+# REQUIRED, no default: plaintext API key for the frontend's server-side /api/shorten route.
+# Comes from your cluster's secret store, not from values.yaml, in any real deployment.
+shortenApiKey: ""
+
 urlServices:
   # shortener-service and resolver-service open a CqlSession against keyspace hopr at
   # boot, so deploy.sh installs the chart once with this off, migrates, then turns it on.
@@ -45,6 +49,7 @@ config:
   shortenerServerPort: "8080"
   resolverServerPort: "8083"
   keygenServerPort: "8081"
+  frontendPort: "3000"
   shortenerDomain: "http://localhost:8888/"
   # REQUIRED, no default: comma-separated SHA-256 digests of the keys accepted on POST /shorten.
   # Left empty so no deployment silently accepts the development key published in this repo --

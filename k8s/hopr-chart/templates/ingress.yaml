@@ -16,6 +16,39 @@ spec:
   rules:
     - http:
         paths:
+          # The frontend sits behind this ingress so its /api/shorten route -- which holds
+          # the server-side API key -- is rate limited per real client address by the
+          # limit-rps annotation above. Exact paths for the two slash-free pages so the
+          # resolver regex below cannot claim them; /shorten and the redirect regex are
+          # untouched, and the `/` Prefix fallback still goes to shortener-service.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: {{ .Values.config.frontendPort }}
+          - path: /_next
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: {{ .Values.config.frontendPort }}
+          - path: /dashboard
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: {{ .Values.config.frontendPort }}
+          - path: /
+            pathType: Exact
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: {{ .Values.config.frontendPort }}
           - path: /shorten
             pathType: Exact
             backend:

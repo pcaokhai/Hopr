@@ -21,23 +21,16 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
-// Each test loads its own module instance, so the in-memory rate-limit buckets start empty.
-function loadRoute() {
-  return import("./route.ts?" + Math.random());
-}
-
-function request(body, ip) {
+function request(body) {
   return new Request("http://localhost:3000/api/shorten", {
     method: "POST",
-    headers: ip
-      ? { "Content-Type": "application/json", "x-forwarded-for": ip }
-      : { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 }
 
 async function post(body) {
-  const { POST } = await loadRoute();
+  const { POST } = await import("./route.ts?" + Math.random());
   return POST(request(body));
 }
 
@@ -73,6 +66,15 @@ test("fails with 500 rather than an unauthenticated call when the key is unset",
   assert.equal(calls.length, 0);
 });
 
+test("relays the gateway's rate-limit rejection to the caller", async () => {
+  stubFetch(Response.json({ status: 429, message: "Too many requests" }, { status: 429 }));
+
+  const res = await post({ longUrl: "https://example.com" });
+
+  assert.equal(res.status, 429);
+  assert.deepEqual(await res.json(), { status: 429, message: "Too many requests" });
+});
+
 test("reports an unreachable backend as 502", async () => {
   globalThis.fetch = async () => {
     throw new TypeError("fetch failed");
@@ -81,42 +83,4 @@ test("reports an unreachable backend as 502", async () => {
   const res = await post({ longUrl: "https://example.com" });
 
   assert.equal(res.status, 502);
-});
-
-test("rate limits a flood and cannot be bypassed by spoofing forwarding headers", async () => {
-  const calls = stubFetch(() => Response.json({ shortUrl: "http://hopr.localhost/abc" }, { status: 201 }));
-  const { POST } = await loadRoute();
-  const body = { longUrl: "https://example.com" };
-
-  const responses = [];
-  for (let i = 0; i < 12; i++) {
-    // A fresh spoofed address per request: it must not mint a fresh bucket.
-    responses.push(await POST(request(body, `10.0.0.${i}`)));
-  }
-
-  const rejected = responses.filter((res) => res.status === 429);
-  assert.ok(rejected.length > 0, "a burst of 12 requests should trip the limit");
-  assert.deepEqual(await rejected[0].json(), {
-    status: 429,
-    message: "Too many requests — please slow down and try again.",
-  });
-  assert.equal(
-    calls.length,
-    responses.length - rejected.length,
-    "rejected requests must not reach upstream",
-  );
-
-  // Nor does dropping the header entirely.
-  assert.equal((await POST(request(body))).status, 429);
-});
-
-test("refills over time so a paced caller is not blocked", async () => {
-  stubFetch(() => Response.json({ shortUrl: "http://hopr.localhost/abc" }, { status: 201 }));
-  const { POST } = await loadRoute();
-  const body = { longUrl: "https://example.com" };
-
-  for (let i = 0; i < 12; i++) await POST(request(body));
-  await new Promise((resolve) => setTimeout(resolve, 400));
-
-  assert.equal((await POST(request(body))).status, 201);
 });

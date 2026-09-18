@@ -19,11 +19,10 @@ the gateway at `SHORTENER_API_BASE_URL` (default `http://hopr.localhost:80`)
 with the `SHORTEN_API_KEY` attached as `X-API-Key`. Both are server-only
 variables — see `.env.example` and copy it to `.env.local` to override. The key
 is deliberately not `NEXT_PUBLIC_`: that would inline it into the browser bundle
-where anyone can read it. Because that route fronts the key, it rate-limits requests
-(token bucket matching the gateway's 5r/s, burst 10) and answers 429 over the
-limit. The bucket is process-wide rather than per caller: a route handler gets
-no connection address, and keying on `x-forwarded-for` would let a caller mint a
-fresh bucket per request. It is in-process, so it assumes a single instance. Generated short
+where anyone can read it. Because that route fronts the key, it is served from behind
+the Nginx gateway, which rate-limits it per real client address (5r/s, burst 10)
+— a Next.js route handler is given no connection address of its own, so it
+cannot limit per caller. `api-gateway/rate-limit-test.sh` proves that end of it. Generated short
 links point at `http://hopr.localhost`, not the Next.js dev server.
 
 ## What's real vs. mocked
@@ -54,5 +53,5 @@ npm test
 Covers the alias-validation regex (mirrored from the shortener-service, see
 `src/lib/alias.ts`) and the `/api/shorten` proxy route — that the API key is
 attached server-side, that the upstream status and body are relayed unchanged,
-that a flood is cut off with 429 even when forwarding headers are spoofed,
+that the gateway's 429 is relayed to the caller,
 and that the browser-side `shorten()` sends no key of its own.

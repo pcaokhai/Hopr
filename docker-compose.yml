@@ -10,6 +10,27 @@ services:
     depends_on:
       - shortener-service
       - resolver-service
+      - frontend
+    networks:
+      - default
+
+  # -------------------- Frontend --------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: hopr/frontend:latest
+    container_name: hopr-frontend
+    environment:
+      # Talks to shortener-service directly: routing the internal hop back through the
+      # gateway would spend the caller's rate-limit budget twice, once per hop.
+      SHORTENER_API_BASE_URL: "http://shortener-service:8080"
+    env_file:
+      # SHORTEN_API_KEY lives with the credentials, not in .env: it is a plaintext key,
+      # unlike the digests the service stores.
+      - .env.secrets
+    depends_on:
+      - shortener-service
     networks:
       - default
 

@@ -13,6 +13,14 @@ for how to run it and exactly which screens are wired to the real `/shorten` API
 (not Radix) — components use the `render` prop for polymorphism, not `asChild`, and a `Button` wrapping a
 non-native element (e.g. a `next/link`) needs `nativeButton={false}` or Base UI logs an a11y warning.
 
+The browser never holds the API key: the shorten form posts same-origin to
+`frontend/src/app/api/shorten/route.ts`, which attaches `X-API-Key` server-side. That route is
+reachable only through the gateway (`api-gateway/nginx.conf` proxies `/api/`, `/_next/`, `/`
+and `/dashboard` to the `frontend` container), which is what rate-limits it per client address —
+a Next.js route handler is given no connection address, so it cannot do that itself.
+`api-gateway/rate-limit-test.sh` drives the real config in docker to prove both the limit and
+that `/shorten` and the redirect regex still reach their own services.
+
 ## Database schema
 
 ScyllaDB schema lives in `db-migration/` as Flyway CQL migrations — see `db-migration/README.md`
