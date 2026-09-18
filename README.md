@@ -400,7 +400,7 @@ The HTTPS server also sets the headers that only make sense over TLS:
 
 | Header | Purpose |
 | :--- | :--- |
-| `Strict-Transport-Security: max-age=31536000; includeSubDomains` | Tells the browser never to try `http://` for this host again, closing the one-request window the `301` leaves open. |
+| `Strict-Transport-Security: max-age=300; includeSubDomains` | Tells the browser never to try `http://` for this host again, closing the one-request window the `301` leaves open. The `max-age` is deliberately short here: this gateway answers for `localhost`, and the standard one-year pin would apply to every other plain-HTTP project on your machine, clearable only via `chrome://net-internals/#hsts`. A real deployment on a real domain raises it to `31536000` (one year) once TLS is proven stable. |
 | `X-Content-Type-Options: nosniff` | Stops the browser from guessing a content type. |
 | `X-Frame-Options: DENY` | Blocks framing / clickjacking. |
 | `Referrer-Policy: strict-origin-when-cross-origin` | Keeps short-link paths out of third-party referrers. |

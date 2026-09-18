@@ -40,12 +40,9 @@ redis:
 # Comes from your cluster's secret store, not from values.yaml, in any real deployment.
 shortenApiKey: ""
 
-# TLS material for the ingress. REQUIRED, no default: empty means no hopr-tls Secret is
-# rendered and the ingress falls back to the controller's own self-signed default cert.
+# TLS material for the ingress. REQUIRED, no default: rendering fails if it is missing.
 # k8s/deploy.sh mints a local self-signed pair and passes it with `--set-file`.
-tls:
-  crt: ""
-  key: ""
+tls: {}
 
 urlServices:
   # shortener-service and resolver-service open a CqlSession against keyspace hopr at

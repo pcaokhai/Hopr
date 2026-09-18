@@ -58,7 +58,7 @@ k8s/
       secret.yaml             REDIS_PASSWORD (hopr-secret) + SHORTEN_API_KEY
                               (hopr-frontend-secret, frontend only)
       tls-secret.yaml         hopr-tls: the certificate/key the Ingresses terminate
-                              TLS with; rendered only when tls.crt is set
+                              TLS with; required, supplied via --set-file
       scylladb.yaml           ScyllaDB StatefulSet + headless Service
       config-server.yaml      Config Server Deployment + Service (port 8888)
       keygen-service.yaml     keygen-service Deployment + Service
@@ -224,8 +224,8 @@ the warning clicked through.
 This is **dev only**. A real deployment installs cert-manager and lets it produce that same
 `hopr-tls` Secret from a Let's Encrypt certificate — see
 [TLS in the root README](../README.md#tls-transport-security) for the concept and the exact
-steps that would change. Leaving `tls.crt` empty skips the Secret entirely and falls back to
-the controller's own default self-signed certificate.
+steps that would change. `tls.crt`/`tls.key` have no defaults: rendering the chart without
+them fails loudly rather than falling back to some other certificate.
 
 ### Why port 8443 (and 8888), not 443/80
 

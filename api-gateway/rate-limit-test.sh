@@ -109,7 +109,7 @@ body=$(docker run --rm --network "$NET" --ip 192.168.210.59 curlimages/curl:late
 
 hsts=$(docker run --rm --network "$NET" --ip 192.168.210.60 curlimages/curl:latest \
   -skI "https://$GATEWAY/" | tr -d '\r')
-grep -qi '^strict-transport-security: max-age=31536000' <<<"$hsts" || fail "no HSTS header on the HTTPS response"
+grep -qi '^strict-transport-security: max-age=300' <<<"$hsts" || fail "no HSTS header on the HTTPS response"
 
 echo "plain HTTP 301s to HTTPS on every route and serves no upstream body; HSTS present"
 echo "rate limited $rejected of 25 requests from one address; other addresses and all routes still served"
