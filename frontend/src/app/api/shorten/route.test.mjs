@@ -7,7 +7,7 @@ function stubFetch(response) {
   const calls = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url, init });
-    return response;
+    return typeof response === "function" ? response() : response;
   };
   return calls;
 }
@@ -21,13 +21,24 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
-async function post(body) {
-  const { POST } = await import("./route.ts?" + Math.random());
-  return POST(new Request("http://localhost:3000/api/shorten", {
+// Each test loads its own module instance, so the in-memory rate-limit buckets start empty.
+function loadRoute() {
+  return import("./route.ts?" + Math.random());
+}
+
+function request(body, ip) {
+  return new Request("http://localhost:3000/api/shorten", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: ip
+      ? { "Content-Type": "application/json", "x-forwarded-for": ip }
+      : { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  }));
+  });
+}
+
+async function post(body) {
+  const { POST } = await loadRoute();
+  return POST(request(body));
 }
 
 test("attaches the server-only API key to the upstream request", async () => {
@@ -70,4 +81,30 @@ test("reports an unreachable backend as 502", async () => {
   const res = await post({ longUrl: "https://example.com" });
 
   assert.equal(res.status, 502);
+});
+
+test("rate limits a flooding IP with 429 while another IP still gets through", async () => {
+  const calls = stubFetch(() => Response.json({ shortUrl: "http://hopr.localhost/abc" }, { status: 201 }));
+  const { POST } = await loadRoute();
+  const body = { longUrl: "https://example.com" };
+
+  const flood = [];
+  for (let i = 0; i < 12; i++) {
+    flood.push(await POST(request(body, "203.0.113.9")));
+  }
+
+  assert.ok(
+    flood.some((res) => res.status === 429),
+    "a burst of 12 requests from one IP should trip the limit",
+  );
+  const limited = flood.find((res) => res.status === 429);
+  assert.deepEqual(await limited.json(), {
+    status: 429,
+    message: "Too many requests — please slow down and try again.",
+  });
+  const rejected = flood.filter((res) => res.status === 429).length;
+  assert.equal(calls.length, flood.length - rejected, "rejected requests must not reach upstream");
+
+  const other = await POST(request(body, "198.51.100.4"));
+  assert.equal(other.status, 201);
 });

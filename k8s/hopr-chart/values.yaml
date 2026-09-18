@@ -46,7 +46,8 @@ config:
   resolverServerPort: "8083"
   keygenServerPort: "8081"
   shortenerDomain: "http://localhost:8888/"
-  # Comma-separated SHA-256 digests of the keys accepted on POST /shorten. Digest of the
-  # local development key `hopr-local-dev-key`; override per environment with your own:
+  # REQUIRED, no default: comma-separated SHA-256 digests of the keys accepted on POST /shorten.
+  # Left empty so no deployment silently accepts the development key published in this repo --
+  # shortener-service refuses to start on an empty list. Mint one per environment:
   #   KEY=$(openssl rand -hex 32); printf %s "$KEY" | shasum -a 256
-  shortenerApiKeyHashes: "6e324a82022ddfc1cfd82d12a1888affe6b14af3672a750ee2cd21fa1934ccea"
+  shortenerApiKeyHashes: ""
