@@ -79,6 +79,12 @@ write_statuses=$(docker run --rm --network "$NET" --ip "$page" curlimages/curl:l
   sh -c 'for i in $(seq 1 25); do curl -s -o /dev/null -w "%{http_code}\n" -X POST http://'"$GATEWAY"'/shorten -d "{}"; done')
 grep -q 429 <<<"$write_statuses" || fail "/shorten was not rate limited after the page load: $(tr '\n' ' ' <<<"$write_statuses")"
 
+# The exemption covers only what the frontend serves: a crafted asset-looking path that falls
+# through to shortener-service must still spend the write-path budget.
+crafted=$(docker run --rm --network "$NET" --ip 192.168.210.57 curlimages/curl:latest \
+  sh -c 'for i in $(seq 1 25); do curl -s -o /dev/null -w "%{http_code}\n" http://'"$GATEWAY"'/evil.js; done')
+grep -q 429 <<<"$crafted" || fail "a non-frontend .js path dodged the rate limit: $(tr '\n' ' ' <<<"$crafted")"
+
 echo "rate limited $rejected of 25 requests from one address; other addresses and all routes still served"
-echo "a 32-request page load from one address was not rate limited; /shorten from it still was"
+echo "a 32-request page load from one address was not rate limited; /shorten and /evil.js from one address still were"
 echo "PASS"

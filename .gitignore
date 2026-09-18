@@ -39,6 +39,7 @@ Thumbs.db
 !.env.example
 !.env.secrets.example
 !.env.frontend.secrets.example
+k8s/.dev-api-key
 stack.override.yml
 data/
 

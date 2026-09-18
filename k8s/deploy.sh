@@ -8,6 +8,14 @@ if ! kind get clusters | grep -q '^hopr$'; then
   kind create cluster --config k8s/kind-config.yaml
 fi
 
+# The chart ships no default key (shortener-service refuses to start on an empty hash list),
+# so mint a local development key once and reuse it on every re-run -- a fresh key each time
+# would invalidate the one already installed in the cluster.
+KEY_FILE="$(dirname "$0")/.dev-api-key"
+[ -f "$KEY_FILE" ] || openssl rand -hex 32 > "$KEY_FILE"
+SHORTEN_API_KEY=$(tr -d '\n' < "$KEY_FILE")
+SHORTEN_API_KEY_HASH=$(printf %s "$SHORTEN_API_KEY" | shasum -a 256 | cut -d' ' -f1)
+
 kubectl create namespace hopr --dry-run=client -o yaml | kubectl apply -f -
 
 helm repo add bitnami https://charts.bitnami.com/bitnami >/dev/null 2>&1 || true
@@ -40,7 +48,8 @@ kubectl wait --namespace ingress-nginx \
 # else first, migrate through a port-forward to the seed node, then enable the two
 # URL services. On a re-run the release already exists and they are left running.
 if ! helm status hopr --namespace hopr >/dev/null 2>&1; then
-  helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr --set urlServices.enabled=false
+  helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr --set urlServices.enabled=false \
+    --set shortenApiKey="$SHORTEN_API_KEY" --set config.shortenerApiKeyHashes="$SHORTEN_API_KEY_HASH"
 fi
 
 kubectl rollout status statefulset/hopr-scylladb -n hopr --timeout=600s
@@ -54,11 +63,13 @@ done
 ./gradlew :db-migration:migrateScylla -Pscylla.contactPoint=127.0.0.1:9042
 kill "$PF_PID" 2>/dev/null || true; trap - EXIT
 
-helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr
+helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr \
+  --set shortenApiKey="$SHORTEN_API_KEY" --set config.shortenerApiKeyHashes="$SHORTEN_API_KEY_HASH"
 
 kubectl rollout status deployment/config-server -n hopr --timeout=120s
 kubectl rollout status deployment/keygen-service -n hopr --timeout=120s
 kubectl rollout status deployment/shortener-service -n hopr --timeout=120s
 kubectl rollout status deployment/resolver-service -n hopr --timeout=120s
+kubectl rollout status deployment/frontend -n hopr --timeout=120s
 
-echo "Hopr is up. Try: curl -X POST http://localhost:8888/shorten -d '{\"longUrl\":\"https://example.com\"}' -H 'Content-Type: application/json'"
+echo "Hopr is up. Try: curl -X POST http://localhost:8888/shorten -d '{\"longUrl\":\"https://example.com\"}' -H 'Content-Type: application/json' -H \"X-API-Key: $SHORTEN_API_KEY\""

@@ -19,6 +19,7 @@ expected = {
     "/api/shorten": "frontend",
     "/_next/static/chunks/main-abc123.js": "frontend",
     "/favicon.ico": "frontend",
+    "/evil.js": "shortener-service",
     "/dashboard": "frontend",
     "/dashboard/my-link": "frontend",
     "/shorten": "shortener-service",
