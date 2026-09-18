@@ -66,13 +66,6 @@ public class ApiKeyFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        // The browser preflight carries no custom headers by definition; letting it through is what
-        // allows the real request that follows to arrive with the key at all.
-        if (isPreflight(request)) {
-            chain.doFilter(request, response);
-            return;
-        }
-
         String presented = request.getHeader(HEADER);
         if (presented == null || !isAccepted(presented)) {
             // One message for both "missing" and "wrong": telling a caller which of the two they hit
@@ -81,10 +74,6 @@ public class ApiKeyFilter extends OncePerRequestFilter {
             return;
         }
         chain.doFilter(request, response);
-    }
-
-    private static boolean isPreflight(HttpServletRequest request) {
-        return "OPTIONS".equalsIgnoreCase(request.getMethod());
     }
 
     private boolean isAccepted(String presented) {

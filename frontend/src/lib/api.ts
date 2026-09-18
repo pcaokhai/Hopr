@@ -1,11 +1,6 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://hopr.localhost:80";
-
-// POST /shorten is API-key gated. NEXT_PUBLIC_ means this key ships to the browser and is
-// therefore public -- it identifies this client for rate limiting and revocation, it does not
-// keep anyone out. A deployment that needs a real secret has to call /shorten from a server-side
-// route holding a non-public key, not from here.
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? "hopr-local-dev-key";
+// POST /shorten is proxied through this app's own server-side route (src/app/api/shorten/route.ts),
+// which holds the API key. The browser never sees a key.
+const SHORTEN_URL = "/api/shorten";
 
 export class ApiError extends Error {
   status: number;
@@ -22,9 +17,9 @@ export interface ShortenResponse {
 export async function shorten(longUrl: string, alias?: string): Promise<ShortenResponse> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}/shorten`, {
+    res = await fetch(SHORTEN_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(alias ? { longUrl, alias } : { longUrl }),
     });
   } catch {

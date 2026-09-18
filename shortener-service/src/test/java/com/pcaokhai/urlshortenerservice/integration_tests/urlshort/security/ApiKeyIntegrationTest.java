@@ -20,6 +20,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -43,6 +44,14 @@ class ApiKeyIntegrationTest extends BaseIntegrationTest {
 
     private String body() throws Exception {
         return objectMapper.writeValueAsString(new ShortenRequest("https://example.com", null));
+    }
+
+    @Test
+    void unauthenticatedOptionsIsRejected() throws Exception {
+        mockMvc.perform(options("/shorten")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Origin", "http://example.com"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
