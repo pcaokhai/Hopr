@@ -8,33 +8,33 @@ const UPSTREAM_BASE_URL =
 
 // This route holds the API key, so without a limit it would be an unmetered way into /shorten:
 // the gateway's per-IP zone only ever sees this server's address. Token bucket matching nginx's
-// `rate=5r/s burst=10`, keyed on the caller's IP.
+// `rate=5r/s burst=10`.
+//
+// The bucket is process-wide, not per caller, because a route handler in this Next.js version is
+// handed no connection address (the request proxy returns undefined for `ip`, and Next only fills
+// `x-forwarded-for` in when the caller did not send one). Keying on a caller-controlled header
+// would let an attacker mint a fresh full bucket per request and bypass the limit entirely, so a
+// single shared bucket is the fail-closed choice. Revisit this if a real reverse proxy is ever
+// put in front of the frontend: the connection address would then always be the proxy's, and the
+// correct form becomes a trusted x-forwarded-for with a configured trusted-proxy hop count.
 // ponytail: per-process and in-memory, so this is only correct while the frontend runs as a
 // single instance; multiple replicas need a shared store (Redis) instead.
 const REFILL_PER_SECOND = 5;
 const BURST = 10;
 
-const buckets = new Map<string, { tokens: number; updatedAt: number }>();
+let tokens = BURST;
+let updatedAt = Date.now();
 
-function clientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return request.headers.get("x-real-ip") ?? "unknown";
-}
-
-function allow(ip: string, now = Date.now()): boolean {
-  const bucket = buckets.get(ip) ?? { tokens: BURST, updatedAt: now };
-  const refilled = Math.min(BURST, bucket.tokens + ((now - bucket.updatedAt) / 1000) * REFILL_PER_SECOND);
-  if (refilled < 1) {
-    buckets.set(ip, { tokens: refilled, updatedAt: now });
-    return false;
-  }
-  buckets.set(ip, { tokens: refilled - 1, updatedAt: now });
+function allow(now = Date.now()): boolean {
+  tokens = Math.min(BURST, tokens + ((now - updatedAt) / 1000) * REFILL_PER_SECOND);
+  updatedAt = now;
+  if (tokens < 1) return false;
+  tokens -= 1;
   return true;
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!allow(clientIp(request))) {
+  if (!allow()) {
     return Response.json(
       { status: 429, message: "Too many requests — please slow down and try again." },
       { status: 429 },

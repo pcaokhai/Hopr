@@ -83,28 +83,40 @@ test("reports an unreachable backend as 502", async () => {
   assert.equal(res.status, 502);
 });
 
-test("rate limits a flooding IP with 429 while another IP still gets through", async () => {
+test("rate limits a flood and cannot be bypassed by spoofing forwarding headers", async () => {
   const calls = stubFetch(() => Response.json({ shortUrl: "http://hopr.localhost/abc" }, { status: 201 }));
   const { POST } = await loadRoute();
   const body = { longUrl: "https://example.com" };
 
-  const flood = [];
+  const responses = [];
   for (let i = 0; i < 12; i++) {
-    flood.push(await POST(request(body, "203.0.113.9")));
+    // A fresh spoofed address per request: it must not mint a fresh bucket.
+    responses.push(await POST(request(body, `10.0.0.${i}`)));
   }
 
-  assert.ok(
-    flood.some((res) => res.status === 429),
-    "a burst of 12 requests from one IP should trip the limit",
-  );
-  const limited = flood.find((res) => res.status === 429);
-  assert.deepEqual(await limited.json(), {
+  const rejected = responses.filter((res) => res.status === 429);
+  assert.ok(rejected.length > 0, "a burst of 12 requests should trip the limit");
+  assert.deepEqual(await rejected[0].json(), {
     status: 429,
     message: "Too many requests — please slow down and try again.",
   });
-  const rejected = flood.filter((res) => res.status === 429).length;
-  assert.equal(calls.length, flood.length - rejected, "rejected requests must not reach upstream");
+  assert.equal(
+    calls.length,
+    responses.length - rejected.length,
+    "rejected requests must not reach upstream",
+  );
 
-  const other = await POST(request(body, "198.51.100.4"));
-  assert.equal(other.status, 201);
+  // Nor does dropping the header entirely.
+  assert.equal((await POST(request(body))).status, 429);
+});
+
+test("refills over time so a paced caller is not blocked", async () => {
+  stubFetch(() => Response.json({ shortUrl: "http://hopr.localhost/abc" }, { status: 201 }));
+  const { POST } = await loadRoute();
+  const body = { longUrl: "https://example.com" };
+
+  for (let i = 0; i < 12; i++) await POST(request(body));
+  await new Promise((resolve) => setTimeout(resolve, 400));
+
+  assert.equal((await POST(request(body))).status, 201);
 });
