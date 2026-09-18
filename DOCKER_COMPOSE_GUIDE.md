@@ -155,12 +155,19 @@ It should show `Up` / `running` before the other microservices report healthy.
 
 ### Test 2: Shorten a URL (Random Key)
 
+> 🔑 **API key required:** `POST /shorten` needs an `X-API-Key` header, or it answers `401
+> Unauthorized`. `.env.example` ships `SHORTENER_API_KEY_HASHES` set to the SHA-256 digest of the
+> local development key `hopr-local-dev-key`, so a fresh `cp .env.example .env` works with the
+> commands below. Only digests are configured — replace the digest (and the key you hand clients)
+> for anything beyond local use. `GET /{shortKey}` redirects remain public and unauthenticated.
+
 > ⚠️ **CRITICAL REQUIREMENT:** The request payload must use the JSON key `longUrl` (do **not** use `url`).
 
 Execute the cURL command:
 
 ```bash
 curl -v -X POST http://hopr.localhost/shorten \
+  -H "X-API-Key: hopr-local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{"longUrl": "https://example.com"}'
 ```
@@ -181,6 +188,7 @@ Provide an optional `alias` attribute to customize the shortened link:
 
 ```bash
 curl -v -X POST http://hopr.localhost/shorten \
+  -H "X-API-Key: hopr-local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{"longUrl": "https://github.com/pcaokhai/Hopr", "alias": "my-hopr-repo"}'
 ```

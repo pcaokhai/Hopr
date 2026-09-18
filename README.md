@@ -256,6 +256,16 @@ All client requests enter through the Nginx Edge Gateway at `http://hopr.localho
 
 ### 1. Shorten a URL (Auto-Generated Key)
 
+> 🔑 **Authentication**: `POST /shorten` requires an `X-API-Key` header; a request without a valid
+> key is rejected with `HTTP 401 Unauthorized` and a `{"status": 401, "message": "..."}` body. The
+> local development key is `hopr-local-dev-key`, whose SHA-256 digest ships in `.env.example` as
+> `SHORTENER_API_KEY_HASHES` — the service only ever stores digests, never the keys themselves. To
+> mint your own: `KEY=$(openssl rand -hex 32); printf %s "$KEY" | shasum -a 256`, then put the digest
+> in `SHORTENER_API_KEY_HASHES` (comma-separate several) and hand `$KEY` to the client.
+>
+> Redirects (`GET /{shortKey}`) stay public and need no key — a short link only works if anyone
+> holding it can follow it.
+
 > ⚠️ **Notice**: Request payload must contain the key `longUrl`. It must be an absolute `http`/`https`
 > URL (scheme is case-insensitive), at most 2048 characters, and parseable as a URI — anything else is
 > rejected with `HTTP 400 Bad Request` and a `{"status": 400, "message": "..."}` body listing the
@@ -263,6 +273,7 @@ All client requests enter through the Nginx Edge Gateway at `http://hopr.localho
 
 ```bash
 curl -v -X POST http://hopr.localhost/shorten \
+  -H "X-API-Key: hopr-local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{"longUrl": "https://github.com/pcaokhai/Hopr"}'
 ```
@@ -280,6 +291,7 @@ curl -v -X POST http://hopr.localhost/shorten \
 
 ```bash
 curl -v -X POST http://hopr.localhost/shorten \
+  -H "X-API-Key: hopr-local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{
     "longUrl": "https://spring.io",
@@ -326,6 +338,7 @@ The API Gateway enforces rate limiting of **5 requests/second with a burst of 10
 for i in {1..15}; do
   curl -s -o /dev/null -w "Request $i: HTTP %{http_code}\n" \
     -X POST http://hopr.localhost/shorten \
+    -H "X-API-Key: hopr-local-dev-key" \
     -H "Content-Type: application/json" \
     -d '{"longUrl": "https://example.com"}'
 done

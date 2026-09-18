@@ -44,6 +44,16 @@ explicitly or the shortener->keygen hop starts a fresh trace. Both are covered b
 `TracePropagationIntegrationTest` (shortener) and `TraceContinuationIntegrationTest` (resolver);
 sampling and endpoint exposure live in `config-server/src/main/resources/config-repo/`.
 
+## API keys
+
+`POST /shorten` requires an `X-API-Key` header; the resolver's redirect path is deliberately
+public and must stay that way. Validation lives in `shortener-service`'s `security` package: the
+filter is registered against the `/shorten` URL pattern only (a bare `@Component` filter would map
+to `/*` and break actuator probes). Only SHA-256 digests of accepted keys are configured
+(`shortener.api-key.hashes` / `SHORTENER_API_KEY_HASHES`), which is why they live in non-secret
+config (`.env`, the chart's ConfigMap) rather than `.env.secrets` — a digest cannot be replayed.
+Local development key: `hopr-local-dev-key`.
+
 ## Local config and secrets
 
 `docker-compose.yml` reads `.env` (non-secret config) and `.env.secrets` (credentials); both are
