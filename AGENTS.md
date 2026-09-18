@@ -54,3 +54,9 @@ is the setup instruction; a fresh clone without those copies fails `docker compo
 
 All four service Dockerfiles run as the unprivileged `appuser` (uid 1001); the guide's step 6
 has the command that verifies it.
+
+## Tests
+
+`scripts/run-tests.sh` runs every suite (Gradle, then `frontend/` `npm test`) and is the
+deterministic test command in `.no-mistakes.yaml`; no-mistakes reads that file from `main`
+only, so edits to it take effect after they land there.

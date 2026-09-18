@@ -1,0 +1,10 @@
+# Per-repo no-mistakes overrides. no-mistakes reads this file from the default
+# branch only, so changes here take effect after they land on main.
+
+# Deterministic test command for the pipeline's Test step. Without it the step
+# hands the whole change to an agent to explore and verify from scratch, which
+# exceeds its per-round time cap on any non-trivial PR.
+# scripts/run-tests.sh runs the Gradle suites (needs Docker for Testcontainers)
+# and then the frontend suite.
+commands:
+  test: 'scripts/run-tests.sh'
