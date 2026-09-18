@@ -12,7 +12,8 @@ fi
 # so mint a local development key once and reuse it on every re-run -- a fresh key each time
 # would invalidate the one already installed in the cluster.
 KEY_FILE="$(dirname "$0")/.dev-api-key"
-[ -f "$KEY_FILE" ] || openssl rand -hex 32 > "$KEY_FILE"
+[ -f "$KEY_FILE" ] || (umask 077; openssl rand -hex 32 > "$KEY_FILE")
+chmod 600 "$KEY_FILE"
 SHORTEN_API_KEY=$(tr -d '\n' < "$KEY_FILE")
 SHORTEN_API_KEY_HASH=$(printf %s "$SHORTEN_API_KEY" | shasum -a 256 | cut -d' ' -f1)
 
