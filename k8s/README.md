@@ -226,9 +226,9 @@ server — and a catch-all server takes its certificate from the controller's
 `--default-ssl-certificate` flag, not from an Ingress `tls:` block. `deploy.sh` therefore
 points that flag at `hopr/hopr-tls` when it patches the controller, and checks at the end
 that the certificate actually served on :8443 is that one rather than the controller's
-built-in fake certificate. (The `tls:` blocks in the Ingresses become the operative reference
-the moment the rules gain a real host name — which is what the cert-manager path below
-assumes.) Nothing trusts the certificate, so every `curl` below uses `-k` and a browser needs
+built-in fake certificate. (The Ingresses carry no `tls:` block, because a host-less rule never
+consults one; a real host name and a per-Ingress `tls:` block arrive together in the
+cert-manager path below.) Nothing trusts the certificate, so every `curl` below uses `-k` and a browser needs
 the warning clicked through.
 
 `deploy.sh` also patches the controller's `hsts-max-age` down to **300 seconds**. The

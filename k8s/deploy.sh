@@ -91,8 +91,15 @@ if ! kubectl -n ingress-nginx get deployment ingress-nginx-controller \
   # the port nginx names in its HTTP->HTTPS redirect are the same number: the redirect target
   # port comes from --https-port, and with the stock 443 it would point at a port no client can
   # reach here. The admission webhook owns 8443 by default, so it moves to 8444.
+  webhook_line=$(kubectl -n ingress-nginx get deployment ingress-nginx-controller \
+    -o jsonpath='{range .spec.template.spec.containers[0].args[*]}{@}{"\n"}{end}' \
+    | grep -n -- '--validating-webhook=' | cut -d: -f1)
+  if [ -z "$webhook_line" ]; then
+    echo "ingress-nginx controller exposes no --validating-webhook arg; refusing to patch by index" >&2
+    exit 1
+  fi
   kubectl -n ingress-nginx patch deployment ingress-nginx-controller --type json -p '[
-    {"op":"replace","path":"/spec/template/spec/containers/0/args/5","value":"--validating-webhook=:8444"},
+    {"op":"replace","path":"/spec/template/spec/containers/0/args/'"$((webhook_line - 1))"'","value":"--validating-webhook=:8444"},
     {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--https-port=8443"},
     {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--default-ssl-certificate=hopr/hopr-tls"},
     {"op":"replace","path":"/spec/template/spec/containers/0/ports/1/containerPort","value":8443},

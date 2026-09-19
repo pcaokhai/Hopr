@@ -16,9 +16,6 @@ metadata:
     nginx.ingress.kubernetes.io/cors-allow-headers: "Origin, X-Requested-With, Content-Type, Accept, Authorization"
 spec:
   ingressClassName: nginx
-  tls:
-    # No `hosts:` -- this is the catch-all certificate for an ingress with no host rules.
-    - secretName: hopr-tls
   rules:
     - http:
         paths:

@@ -430,20 +430,24 @@ self-signed certificate only gives you the first.
 ### Future concept: a real certificate via cert-manager + Let's Encrypt
 
 Not built here — this project has no registered domain to issue a certificate for. When it
-does, the change is small, because the `hopr-tls` Secret the Ingress already references is
+does, the change is small, because the `hopr-tls` Secret the controller already serves is
 exactly what cert-manager produces:
 
 1. Install cert-manager and create a `ClusterIssuer` for Let's Encrypt (ACME) using the
    HTTP-01 challenge, which the existing ingress-nginx controller already serves.
-2. Give the Ingress a real host rule (`host: hopr.example.com`) and add
-   `cert-manager.io/cluster-issuer: letsencrypt-prod` plus that host under `tls.hosts`.
+2. Give the Ingress a real host rule (`host: hopr.example.com`) plus its own `tls:` block
+   listing that host, and the `cert-manager.io/cluster-issuer: letsencrypt-prod` annotation.
 3. Delete the self-signed generation from `k8s/deploy.sh` and the `tls.crt`/`tls.key` values
    — cert-manager creates and renews `hopr-tls` itself, every 60 days, with no human step.
 4. Point DNS at the ingress, so Let's Encrypt can reach the challenge and prove you control
    the domain — the step a self-signed certificate skips, and the whole reason clients trust
    the result.
 
-Nothing in `ingress.yaml` beyond the host name changes; the Ingress reads the same Secret.
+Today the Ingresses are host-less, so the controller serves them from its catch-all server and
+takes the certificate from its `--default-ssl-certificate=hopr/hopr-tls` flag (set by
+`k8s/deploy.sh`) — no Ingress `tls:` block is consulted, which is why none is written. Adding a
+real host is what makes a per-Ingress `tls:` block the operative reference; the Secret name
+stays `hopr-tls`.
 
 ---
 

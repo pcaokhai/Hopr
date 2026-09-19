@@ -33,7 +33,7 @@ for spec in frontend:3000 shortener-service:8080 resolver-service:8083; do
     --entrypoint sh nginx:latest -c "printf 'events {}\nhttp { server { listen $port; location / { return 200 \"$name\"; } } }' > /etc/nginx/nginx.conf && nginx -g 'daemon off;'" >/dev/null
 done
 
-[ -f "$CERTS/dev.crt" ] || "$HERE/generate-dev-cert.sh" >/dev/null
+{ [ -f "$CERTS/dev.crt" ] && [ -f "$CERTS/dev.key" ]; } || "$HERE/generate-dev-cert.sh" >/dev/null
 
 docker run -d --name "$GATEWAY" --network "$NET" \
   -v "$CONF":/etc/nginx/nginx.conf:ro -v "$HERE/security-headers.conf":/etc/nginx/security-headers.conf:ro \
