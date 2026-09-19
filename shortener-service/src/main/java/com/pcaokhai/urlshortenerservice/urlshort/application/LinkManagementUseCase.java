@@ -23,6 +23,7 @@ import com.pcaokhai.common.url.repository.UrlRepository;
 import com.pcaokhai.urlshortenerservice.urlshort.exception.LinkNotFoundException;
 import org.springframework.cache.CacheManager;
 import org.springframework.data.cassandra.core.CassandraOperations;
+import org.springframework.data.cassandra.core.InsertOptions;
 import org.springframework.data.cassandra.core.query.CassandraPageRequest;
 import org.springframework.data.cassandra.core.query.Query;
 import org.springframework.data.domain.Slice;
@@ -30,6 +31,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
@@ -78,9 +80,23 @@ public class LinkManagementUseCase {
         if (request.expiresInSeconds() != null) {
             mapping.setExpiresAt(Instant.now().plusSeconds(request.expiresInSeconds()));
         }
-        UrlMapping saved = urlRepository.save(mapping);
+        UrlMapping saved = saveWithTtl(mapping);
         evictCache(shortKey);
         return LinkResponse.from(saved);
+    }
+
+    // Plain repository.save() is a TTL-less INSERT (see UrlRepository's javadoc), which would
+    // silently strip the `USING TTL` clause DbCacheSaver wrote at creation time -- making an
+    // expiring link permanent, or leaving a newly-set expiresInSeconds never actually applied by
+    // ScyllaDB. Re-derive the remaining TTL from expiresAt and write through it the same way.
+    private UrlMapping saveWithTtl(UrlMapping mapping) {
+        Instant expiresAt = mapping.getExpiresAt();
+        if (expiresAt == null) {
+            return cassandra.insert(mapping);
+        }
+        long ttlSeconds = Math.max(1, Duration.between(Instant.now(), expiresAt).getSeconds());
+        InsertOptions options = InsertOptions.builder().ttl(Duration.ofSeconds(ttlSeconds)).build();
+        return cassandra.insert(mapping, options).getEntity();
     }
 
     public void delete(String shortKey) {
