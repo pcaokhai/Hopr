@@ -65,7 +65,7 @@ public class DbCacheSaver {
     public boolean saveUrlMappingIfAbsent(UrlMapping urlMapping, Long ttlSeconds) {
         InsertOptions options = ttlSeconds == null ? IF_NOT_EXISTS : withTtl(ttlSeconds);
         boolean applied = cassandra.insert(urlMapping, options).wasApplied();
-        if (applied) {
+        if (applied && ttlSeconds == null) {
             cache(urlMapping);
         }
         return applied;

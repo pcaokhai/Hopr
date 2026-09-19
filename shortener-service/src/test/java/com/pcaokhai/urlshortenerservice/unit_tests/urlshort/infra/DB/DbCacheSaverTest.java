@@ -63,8 +63,7 @@ public class DbCacheSaverTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void saveIfAbsent_withTtl_insertsWithTtlOptionAndCaches() {
-        when(cacheManager.getCache("keys")).thenReturn(cache);
+    void saveIfAbsent_withTtl_insertsWithTtlOptionAndSkipsCache() {
         UrlMapping urlMapping = new UrlMapping("abc123", "https://example.com", "abc123");
         EntityWriteResult<UrlMapping> result = mock(EntityWriteResult.class);
         when(result.wasApplied()).thenReturn(true);
@@ -74,6 +73,6 @@ public class DbCacheSaverTest {
 
         verify(cassandra).insert(eq(urlMapping), argThat((InsertOptions options) -> options.getTtl() != null
                 && options.getTtl().getSeconds() == 60));
-        verify(cache).put("abc123", urlMapping);
+        verifyNoInteractions(cacheManager);
     }
 }
