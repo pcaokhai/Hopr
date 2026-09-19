@@ -94,12 +94,14 @@ grep -q 429 <<<"$crafted" || fail "a non-frontend .js path dodged the rate limit
 
 # --- TLS termination ---------------------------------------------------------------
 # Plain HTTP must redirect and must never serve an upstream response itself. Checked on
-# a page path and on the write path that carries the API key header.
+# a page path and on the write path that carries the API key header. The target is the
+# server block's primary name, so any plaintext host (including http://localhost/) lands
+# on https://hopr.localhost/ rather than being echoed back.
 for path in / /shorten /dashboard /abcd; do
   plain=$(docker run --rm --network "$NET" --ip 192.168.210.58 curlimages/curl:latest \
     -s -o /dev/null -w '%{http_code} %{redirect_url}' "http://$GATEWAY$path")
   [[ "$plain" == 301* ]] || fail "http://$path was not redirected: $plain"
-  [[ "$plain" == *"https://$GATEWAY$path" ]] || fail "http://$path redirected somewhere unexpected: $plain"
+  [[ "$plain" == *"https://hopr.localhost$path" ]] || fail "http://$path redirected somewhere unexpected: $plain"
 done
 
 # And the redirect is all port 80 does: no body from any upstream leaks over plaintext.

@@ -6,12 +6,20 @@ Next.js (App Router) + TypeScript + Tailwind + shadcn/ui + Zustand.
 
 ```bash
 # from the repo root
+./api-gateway/generate-dev-cert.sh   # once; the gateway needs it to serve HTTPS
 docker compose up -d
 
 # from this directory
 npm install
+
+# trust the gateway's dev certificate, or Node rejects it as self-signed
+export NODE_EXTRA_CA_CERTS="$(cd .. && pwd)/api-gateway/certs/dev.crt"
 npm run dev
 ```
+
+Generate the certificate before either step — the gateway will not start without it.
+`NODE_EXTRA_CA_CERTS` must be an absolute path (or relative to the directory you run
+`npm run dev` from) and must be exported in the same shell as `npm run dev`.
 
 Open http://localhost:3000. The shorten box on the landing page posts to this
 app's own server-side route (`src/app/api/shorten/route.ts`), which forwards to
