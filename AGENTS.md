@@ -67,6 +67,21 @@ explicitly or the shortener->keygen hop starts a fresh trace. Both are covered b
 `TracePropagationIntegrationTest` (shortener) and `TraceContinuationIntegrationTest` (resolver);
 sampling and endpoint exposure live in `config-server/src/main/resources/config-repo/`.
 
+## Link management
+
+`shortener-service`'s `GET/GET {shortKey}/PATCH {shortKey}/DELETE {shortKey}` under `/links`
+(`LinkManagementController`/`LinkManagementUseCase`) let a caller list, read, update, or delete
+any previously-shortened link, gated by the same `X-API-Key` filter as `/shorten` — see
+`ApiKeySecurityConfig`. There is no per-owner scoping: the `urls` table's `owner_id` column
+exists but nothing populates or enforces it yet (deferred to a future multi-tenancy phase), so
+any caller holding the key can manage any link. `GET /links` is an unscoped full-table scan
+over Scylla's native paging state (`CassandraPageRequest`, base64-encoded as `pageToken`) —
+honest "every link in the system", not "my links"; a real per-owner listing needs a
+query-first secondary table keyed by `owner_id` before it can narrow. Update/delete evict only
+`shortener-service`'s own Redis cache entry; the resolver runs an independently-namespaced Redis
+cache (see Observability/Resilience sections' Boot 4 traps — same pattern applies to cache
+naming) and can keep serving a stale mapping for up to its 12h TTL after an update/delete.
+
 ## API keys
 
 `POST /shorten` requires an `X-API-Key` header; the resolver's redirect path is deliberately

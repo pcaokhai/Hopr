@@ -52,18 +52,30 @@ public class UrlMapping implements Serializable {
     @Column("expires_at")
     private Instant expiresAt;
 
+    @Column("created_at")
+    private Instant createdAt;
+
+    @Column("status")
+    private String status;
+
     public UrlMapping() {}
 
     public UrlMapping(String shortKey, String longUrl, String alias) {
         this(shortKey, longUrl, alias, null);
     }
 
-    @PersistenceCreator
     public UrlMapping(String shortKey, String longUrl, String alias, Instant expiresAt) {
+        this(shortKey, longUrl, alias, expiresAt, null, null);
+    }
+
+    @PersistenceCreator
+    public UrlMapping(String shortKey, String longUrl, String alias, Instant expiresAt, Instant createdAt, String status) {
         this.shortKey = shortKey;
         this.longUrl = longUrl;
         this.alias = alias;
         this.expiresAt = expiresAt;
+        this.createdAt = createdAt;
+        this.status = status;
     }
 
     public String getShortKey() {
@@ -78,6 +90,10 @@ public class UrlMapping implements Serializable {
 
     public Instant getExpiresAt() {return expiresAt;}
 
+    public Instant getCreatedAt() {return createdAt;}
+
+    public String getStatus() {return status;}
+
     public void setShortKey(String shortKey) {
         this.shortKey = shortKey;
     }
@@ -88,16 +104,21 @@ public class UrlMapping implements Serializable {
 
     public void setExpiresAt(Instant expiresAt) {this.expiresAt = expiresAt;}
 
+    public void setCreatedAt(Instant createdAt) {this.createdAt = createdAt;}
+
+    public void setStatus(String status) {this.status = status;}
+
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
         UrlMapping that = (UrlMapping) o;
         return Objects.equals(shortKey, that.shortKey) && Objects.equals(longUrl, that.longUrl)
-                && Objects.equals(alias, that.alias) && Objects.equals(expiresAt, that.expiresAt);
+                && Objects.equals(alias, that.alias) && Objects.equals(expiresAt, that.expiresAt)
+                && Objects.equals(createdAt, that.createdAt) && Objects.equals(status, that.status);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(shortKey, longUrl, alias, expiresAt);
+        return Objects.hash(shortKey, longUrl, alias, expiresAt, createdAt, status);
     }
 }
