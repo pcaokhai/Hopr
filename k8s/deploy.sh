@@ -8,11 +8,16 @@ cd "$SCRIPT_DIR/.."
 if kind get clusters | grep -q '^hopr$'; then
   # extraPortMappings are fixed when the cluster is created, so a cluster made before the
   # HTTPS mapping moved to node port 8443 keeps the old one and host 8443 reaches nothing.
-  if ! docker port hopr-control-plane 8443/tcp >/dev/null 2>&1; then
+  # Read the configured bindings, which survive a stopped node, not the live ones.
+  if ! docker inspect -f '{{json .HostConfig.PortBindings}}' hopr-control-plane 2>/dev/null \
+    | grep -q '"8443/tcp"'; then
     echo "The existing 'hopr' kind cluster does not map host port 8443 to node port 8443," >&2
     echo "so HTTPS would be unreachable. kind cannot change that after creation:" >&2
     echo "  kind delete cluster --name hopr && ./k8s/deploy.sh" >&2
     exit 1
+  fi
+  if [ "$(docker inspect -f '{{.State.Running}}' hopr-control-plane)" != "true" ]; then
+    docker start hopr-control-plane >/dev/null
   fi
 else
   kind create cluster --config k8s/kind-config.yaml
