@@ -36,7 +36,8 @@ done
 [ -f "$CERTS/dev.crt" ] || "$HERE/generate-dev-cert.sh" >/dev/null
 
 docker run -d --name "$GATEWAY" --network "$NET" \
-  -v "$CONF":/etc/nginx/nginx.conf:ro -v "$CERTS":/etc/nginx/certs:ro nginx:latest >/dev/null
+  -v "$CONF":/etc/nginx/nginx.conf:ro -v "$HERE/security-headers.conf":/etc/nginx/security-headers.conf:ro \
+  -v "$CERTS":/etc/nginx/certs:ro nginx:latest >/dev/null
 
 for _ in $(seq 1 30); do
   docker run --rm --network "$NET" curlimages/curl:latest -sk -o /dev/null "https://$GATEWAY/" && break
@@ -109,9 +110,18 @@ body=$(docker run --rm --network "$NET" --ip 192.168.210.59 curlimages/curl:late
   -s "http://$GATEWAY/")
 [[ "$body" != *frontend* && "$body" != *shortener-service* ]] || fail "plain HTTP served an upstream response: $body"
 
-hsts=$(docker run --rm --network "$NET" --ip 192.168.210.60 curlimages/curl:latest \
-  -skI "https://$GATEWAY/" | tr -d '\r')
-grep -qi '^strict-transport-security: max-age=300' <<<"$hsts" || fail "no HSTS header on the HTTPS response"
+# Every HTTPS response carries the security headers, including POST /shorten -- the route
+# that carries the API key and sets its own CORS add_header, which in nginx would otherwise
+# discard the inherited ones.
+for probe in "192.168.210.60 / -I" "192.168.210.61 /shorten -D- -o/dev/null -XPOST -d{}"; do
+  read -r ip path extra1 extra2 extra3 extra4 <<<"$probe"
+  headers=$(docker run --rm --network "$NET" --ip "$ip" curlimages/curl:latest \
+    -sk $extra1 $extra2 $extra3 $extra4 "https://$GATEWAY$path" | tr -d '\r')
+  for header in 'strict-transport-security: max-age=300' 'x-content-type-options: nosniff' \
+                'x-frame-options: DENY' 'referrer-policy: strict-origin-when-cross-origin'; do
+    grep -qi "^$header" <<<"$headers" || fail "$path is missing '$header': $headers"
+  done
+done
 
 echo "plain HTTP 301s to HTTPS on every route and serves no upstream body; HSTS present"
 echo "rate limited $rejected of 25 requests from one address; other addresses and all routes still served"

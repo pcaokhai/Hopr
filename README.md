@@ -258,8 +258,9 @@ For in-depth Kubernetes documentation, values overrides, and cluster architectur
 ## API Reference & Testing Guide
 
 All client requests enter through the Nginx Edge Gateway at `https://hopr.localhost/` over
-HTTPS. Plain `http://` is answered with a `301` to the same URL on HTTPS and serves nothing
-itself. The gateway's certificate is **self-signed** in local development, so every `curl`
+HTTPS. Plain `http://` is answered with a `301` to the same path on `https://hopr.localhost`
+(the gateway's primary name, so `http://localhost/x` lands on `https://hopr.localhost/x`) and
+serves nothing itself. The gateway's certificate is **self-signed** in local development, so every `curl`
 below passes `-k` and a browser will show a warning you have to click through — see
 [TLS](#tls-transport-security) for why, and for what a real deployment does instead.
 
