@@ -32,9 +32,10 @@ Designed with clean architecture and domain-driven principles, Hopr eliminates c
 - [API Reference & Testing Guide](#api-reference--testing-guide)
   - [1. Shorten a URL (Auto-Generated Key)](#1-shorten-a-url-auto-generated-key)
   - [2. Shorten a URL with Custom Alias](#2-shorten-a-url-with-custom-alias)
-  - [3. Resolve & Redirect (GET /{shortKey})](#3-resolve--redirect-get-shortkey)
-  - [4. Verify Edge Rate Limiting](#4-verify-edge-rate-limiting)
-  - [5. Interactive Swagger / OpenAPI UI](#5-interactive-swagger--openapi-ui)
+  - [3. Shorten a URL with an Expiration](#3-shorten-a-url-with-an-expiration)
+  - [4. Resolve & Redirect (GET /{shortKey})](#4-resolve--redirect-get-shortkey)
+  - [5. Verify Edge Rate Limiting](#5-verify-edge-rate-limiting)
+  - [6. Interactive Swagger / OpenAPI UI](#6-interactive-swagger--openapi-ui)
 - [Frontend](#frontend)
 - [TLS (Transport Security)](#tls-transport-security)
 - [Quality Assurance & CI](#quality-assurance--ci)
@@ -320,7 +321,33 @@ curl -vk -X POST https://hopr.localhost/shorten \
 
 ---
 
-### 3. Resolve & Redirect (GET /{shortKey})
+### 3. Shorten a URL with an Expiration
+
+Pass `expiresInSeconds` to make the short link expire on its own — the row is written to
+ScyllaDB with a native per-row TTL, so the database physically drops it once the time elapses
+(no application cleanup job involved). Once expired, the link 404s on resolve. Omitting the
+field keeps the pre-existing behavior of a link that never expires.
+
+```bash
+curl -vk -X POST https://hopr.localhost/shorten \
+  -H "X-API-Key: hopr-local-dev-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "longUrl": "https://example.com/flash-sale",
+    "expiresInSeconds": 3600
+  }'
+```
+
+**Response (HTTP 200 OK):**
+```json
+{
+  "shortUrl": "https://hopr.localhost/9fQ2mZa"
+}
+```
+
+---
+
+### 4. Resolve & Redirect (GET /{shortKey})
 
 Use the generated key or alias:
 
@@ -340,7 +367,7 @@ curl -vk https://hopr.localhost/spring-home
 
 ---
 
-### 4. Verify Edge Rate Limiting
+### 5. Verify Edge Rate Limiting
 
 The API Gateway enforces rate limiting of **5 requests/second with a burst of 10**. Test the threshold using a bash loop:
 
@@ -358,7 +385,7 @@ done
 
 ---
 
-### 5. Interactive Swagger / OpenAPI UI
+### 6. Interactive Swagger / OpenAPI UI
 
 When running locally, explore and test individual microservice APIs via Swagger UI:
 
