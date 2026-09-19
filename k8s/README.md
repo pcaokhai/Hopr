@@ -156,7 +156,10 @@ check.
 ```
 
 This will, in order:
-1. Create the `kind` cluster `hopr` if it doesn't already exist
+1. Create the `kind` cluster `hopr` if it doesn't already exist (an existing cluster is
+   reused, but one created before the HTTPS host port moved to node port 8443 is rejected
+   with the `kind delete cluster --name hopr` command to fix it — port mappings cannot be
+   changed after creation)
    (`k8s/kind-config.yaml` maps the node's container ports 80 → host port
    **8888** and 443 → **8443**, and labels the node `ingress-ready=true` for
    `ingress-nginx`).
@@ -242,7 +245,9 @@ HTTPS listener to 8443 (`--https-port`, with the admission webhook shifted to 84
 on `use-port-in-redirects`, so that `http://localhost:8888/x` redirects to
 `https://localhost:8443/x` — a port that actually serves TLS. With the stock settings the
 redirect names port 443, which nothing maps here, and the HTTP entry point would be a dead
-end. This is deliberate: this repo's own
+end. Those host mappings are fixed when the cluster is created, so an older `hopr` cluster
+has to be deleted and recreated — `deploy.sh` checks and says so rather than deploying into
+a cluster whose HTTPS port goes nowhere. This is deliberate: this repo's own
 `docker-compose.yml` stack already binds host port 80 (and 8080/8081/8083/
 27017/etc.) when running, and the two setups are meant to coexist without
 one blocking the other. If you're not running docker-compose at the same

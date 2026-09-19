@@ -5,7 +5,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
-if ! kind get clusters | grep -q '^hopr$'; then
+if kind get clusters | grep -q '^hopr$'; then
+  # extraPortMappings are fixed when the cluster is created, so a cluster made before the
+  # HTTPS mapping moved to node port 8443 keeps the old one and host 8443 reaches nothing.
+  if ! docker port hopr-control-plane 8443/tcp >/dev/null 2>&1; then
+    echo "The existing 'hopr' kind cluster does not map host port 8443 to node port 8443," >&2
+    echo "so HTTPS would be unreachable. kind cannot change that after creation:" >&2
+    echo "  kind delete cluster --name hopr && ./k8s/deploy.sh" >&2
+    exit 1
+  fi
+else
   kind create cluster --config k8s/kind-config.yaml
 fi
 
@@ -76,10 +85,7 @@ kubectl -n ingress-nginx patch deployment ingress-nginx-controller --type json -
 kubectl -n ingress-nginx patch configmap ingress-nginx-controller --type merge \
   -p '{"data":{"hsts-max-age":"300","use-port-in-redirects":"true"}}'
 
-kubectl wait --namespace ingress-nginx \
-  --for=condition=ready pod \
-  --selector=app.kubernetes.io/component=controller \
-  --timeout=180s
+kubectl -n ingress-nginx rollout status deployment/ingress-nginx-controller --timeout=180s
 
 ./k8s/build-and-load.sh
 
