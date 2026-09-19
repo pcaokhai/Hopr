@@ -112,3 +112,21 @@ has the command that verifies it.
 `scripts/run-tests.sh` runs every suite (Gradle, then `frontend/` `npm test`) and is the
 deterministic test command in `.no-mistakes.yaml`; no-mistakes reads that file from `main`
 only, so edits to it take effect after they land there.
+
+## Inter-service contract tests
+
+`docs/contracts/` holds one JSON fixture per cross-service HTTP shape (currently keygen-service's
+`GET /generate`), read by a test on both sides of the boundary — see `docs/contracts/README.md`
+for why a shared fixture plus two JUnit tests was chosen over a contract-testing framework, and
+`KeyGenControllerContractTest` (keygen-service, provider) / `KeyGenClientContractTest`
+(shortener-service, consumer) for the pattern to copy for a future service boundary (e.g. Phase
+5's event-driven work). These run as part of `./gradlew test` like any other test.
+
+## Load testing
+
+`scripts/load-test-resolver.sh` runs a k6 load test (`resolver-service/loadtest/`) against the
+resolver's redirect path on a real docker-compose stack, and is not part of `scripts/run-tests.sh`
+— see the script's header comment for why and its intended cadence. README's resolver latency
+claim was corrected from an unqualified "sub-millisecond" to the actual measured p50/p95/p99
+after running it; re-run and update that claim if resolver caching, Redis/Scylla topology, or the
+hot path changes.

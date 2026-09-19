@@ -11,7 +11,7 @@
 [![JaCoCo Coverage](https://img.shields.io/badge/Coverage-%E2%89%A5%2085%25-green.svg?style=flat-square&logo=codecov)](https://www.eclemma.org/jacoco/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
 
-**Hopr** is a cloud-native, production-grade distributed URL shortening and resolution platform engineered for ultra-high throughput, sub-millisecond redirect latency, and horizontal scalability.
+**Hopr** is a cloud-native, production-grade distributed URL shortening and resolution platform engineered for ultra-high throughput, low-latency redirect resolution, and horizontal scalability.
 
 Designed with clean architecture and domain-driven principles, Hopr eliminates common database bottlenecks using **distributed 64-bit Snowflake ID generation**, **Base62 URL-safe encoding**, a **6-node Redis Cluster** multi-tier caching layer, and an **Nginx Edge API Gateway** with native C-level rate limiting.
 
@@ -49,7 +49,7 @@ Designed with clean architecture and domain-driven principles, Hopr eliminates c
 ## Architectural Highlights
 
 - **Decentralized, Collision-Free Key Generation**: Uses a 64-bit Twitter Snowflake algorithm (timestamp + worker ID + sequence) coupled with Base62 encoding. Generates 7-character URL-safe slugs without database auto-increment locks or central coordination overhead.
-- **Sub-Millisecond Read Latency**: Read operations bypass database lookups via an in-memory Caffeine local cache backed by a distributed **6-node Redis Cluster** (3 masters + 3 replicas). A 3-node **ScyllaDB** cluster (RF 3) acts as durable cold storage.
+- **Sub-Millisecond Median Read Latency**: Read operations bypass database lookups via an in-memory Caffeine local cache backed by a distributed **6-node Redis Cluster** (3 masters + 3 replicas). A 3-node **ScyllaDB** cluster (RF 3) acts as durable cold storage. Measured with `scripts/load-test-resolver.sh` (k6, 20 concurrent VUs, warm cache, single-instance Compose stack) against a resolver-service Docker Compose deployment: p50 ≈ 409µs, p95 ≈ 886µs, **p99 ≈ 1.66ms** — the median and p95 are sub-millisecond, but the tail (p99) is not; see the load test script and `resolver-service/loadtest/` for how to reproduce and for how these numbers change under a different load level or environment.
 - **Lightweight Edge API Gateway**: Powered by Nginx on port `80`, handling North-South routing, CORS preflight (`OPTIONS`), and socket-level token bucket rate limiting (5 req/s, burst 10) with negligible memory footprint (~20MB RAM) and zero GC pauses.
 - **Cloud-Native Service Discovery**: Eliminates heavyweight JVM service registries (Netflix Eureka) in favor of container platform discovery (Docker Compose internal DNS and Kubernetes CoreDNS/kube-proxy).
 - **Centralized Spring Cloud Config Server**: Native repository-backed configuration server delivering environment-agnostic properties to all downstream microservices at startup.
