@@ -39,7 +39,9 @@ public class ResolverUseCase {
         UrlMapping longUrl = getFromCache(shortKey);
         if (longUrl == null) {
             longUrl = getFromDb(shortKey);
-            saveInCache(shortKey, longUrl);
+            if (longUrl.getExpiresAt() == null) {
+                saveInCache(shortKey, longUrl);
+            }
         }
         return longUrl.getLongUrl();
     }

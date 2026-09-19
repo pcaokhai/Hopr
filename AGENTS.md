@@ -42,7 +42,12 @@ Every production write of `urls` claims its short key through the `IF NOT EXISTS
 transaction in the shortener's `DbCacheSaver.saveUrlMappingIfAbsent` — a non-applied write becomes
 a 409 for a user-chosen alias and a bounded retry under a freshly generated key otherwise.
 `UrlRepository.save` is a plain CQL INSERT, i.e. an upsert that silently overwrites an existing
-row, and is not used to write.
+row, and is not used to write. A shorten request may set `expiresInSeconds`; `DbCacheSaver` then
+writes the row `USING TTL` so ScyllaDB itself expires and removes it — no app-level cleanup job.
+Because a TTL'd row can vanish out from under a fixed-TTL cache entry, both the write-through
+cache in `DbCacheSaver` and the read-through cache in resolver's `ResolverUseCase` skip caching
+whenever `UrlMapping.getExpiresAt()` is set, so an expired link can't keep resolving from a stale
+cache entry after ScyllaDB has already dropped the row.
 
 ## Resilience
 
