@@ -57,6 +57,6 @@ public record ShortenRequest(
     /** Longest URL we accept: the practical ceiling browsers and CDNs impose on a URL. */
     public static final int MAX_LONG_URL_LENGTH = 2048;
 
-    /** Absolute http(s) URL with a non-empty, whitespace-free host. */
-    private static final String HTTP_URL = "^(?i:https?)://[^\\s/?#]+[^\\s]*\\z";
+    /** Absolute http(s) URL with a non-empty, whitespace-free host. Shared with {@link UpdateLinkRequest}. */
+    static final String HTTP_URL = "^(?i:https?)://[^\\s/?#]+[^\\s]*\\z";
 }

@@ -21,9 +21,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Wires {@link ApiKeyFilter} onto {@code /shorten} and nothing else.
+ * Wires {@link ApiKeyFilter} onto {@code /shorten} and the {@code /links} management endpoints,
+ * and nothing else.
  *
- * <p>A {@link FilterRegistrationBean} with an explicit URL pattern -- rather than a bare
+ * <p>A {@link FilterRegistrationBean} with explicit URL patterns -- rather than a bare
  * {@code @Component} filter, which the servlet container would map to {@code /*} -- is what keeps
  * actuator health, info, and the Prometheus scrape endpoint unauthenticated for the platform.
  */
@@ -35,7 +36,7 @@ public class ApiKeySecurityConfig {
             ApiKeyProperties properties, ObjectMapper objectMapper) {
         FilterRegistrationBean<ApiKeyFilter> registration = new FilterRegistrationBean<>(
                 new ApiKeyFilter(properties.getHashes(), objectMapper));
-        registration.addUrlPatterns("/shorten");
+        registration.addUrlPatterns("/shorten", "/links", "/links/*");
         return registration;
     }
 }

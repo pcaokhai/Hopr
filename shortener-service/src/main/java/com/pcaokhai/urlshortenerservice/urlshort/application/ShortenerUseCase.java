@@ -82,11 +82,13 @@ public class ShortenerUseCase {
                 "Could not claim a free short key after " + MAX_GENERATED_KEY_ATTEMPTS + " attempts");
     }
 
+    static final String STATUS_ACTIVE = "ACTIVE";
+
     private UrlMapping buildMapping(String shortKey, ShortenRequest request) {
         Instant expiresAt = request.expiresInSeconds() == null
                 ? null
                 : Instant.now().plusSeconds(request.expiresInSeconds());
-        return new UrlMapping(shortKey, request.longUrl(), request.alias(), expiresAt);
+        return new UrlMapping(shortKey, request.longUrl(), request.alias(), expiresAt, Instant.now(), STATUS_ACTIVE);
     }
 
     private ShortenResponse buildShortUrl(String shortKey) {

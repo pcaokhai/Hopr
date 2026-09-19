@@ -9,7 +9,8 @@ When updating this file, preserve this bar for all agents and keep entries conci
 
 `frontend/` is a Next.js (App Router) + TypeScript + Tailwind + shadcn/ui + Zustand app. See `frontend/README.md`
 for how to run it and exactly which screens are wired to the real `/shorten` API vs. backed by mock data
-(the backend has no list/analytics/auth endpoints yet). shadcn/ui here uses the Base UI component library
+(the dashboard isn't wired to the `/links` endpoints below yet, and there is still no analytics or
+auth endpoint). shadcn/ui here uses the Base UI component library
 (not Radix) — components use the `render` prop for polymorphism, not `asChild`, and a `Button` wrapping a
 non-native element (e.g. a `next/link`) needs `nativeButton={false}` or Base UI logs an a11y warning.
 
@@ -66,6 +67,21 @@ which must be declared too (it does not pull the bridge transitively, so both li
 explicitly or the shortener->keygen hop starts a fresh trace. Both are covered by
 `TracePropagationIntegrationTest` (shortener) and `TraceContinuationIntegrationTest` (resolver);
 sampling and endpoint exposure live in `config-server/src/main/resources/config-repo/`.
+
+## Link management
+
+`shortener-service`'s `GET/GET {shortKey}/PATCH {shortKey}/DELETE {shortKey}` under `/links`
+(`LinkManagementController`/`LinkManagementUseCase`) let a caller list, read, update, or delete
+any previously-shortened link, gated by the same `X-API-Key` filter as `/shorten` — see
+`ApiKeySecurityConfig`. There is no per-owner scoping: the `urls` table's `owner_id` column
+exists but nothing populates or enforces it yet (deferred to a future multi-tenancy phase), so
+any caller holding the key can manage any link. `GET /links` is an unscoped full-table scan
+over Scylla's native paging state (`CassandraPageRequest`, base64-encoded as `pageToken`) —
+honest "every link in the system", not "my links"; a real per-owner listing needs a
+query-first secondary table keyed by `owner_id` before it can narrow. Update/delete evict only
+`shortener-service`'s own Redis cache entry; the resolver runs an independently-namespaced Redis
+cache (see Observability/Resilience sections' Boot 4 traps — same pattern applies to cache
+naming) and can keep serving a stale mapping for up to its 12h TTL after an update/delete.
 
 ## API keys
 
