@@ -21,6 +21,16 @@ a Next.js route handler is given no connection address, so it cannot do that its
 `api-gateway/rate-limit-test.sh` drives the real config in docker to prove both the limit and
 that `/shorten` and the redirect regex still reach their own services.
 
+## TLS
+
+The gateway terminates TLS and serves nothing over plaintext: port 80 only 301s to HTTPS.
+Certificates and keys are never committed -- `api-gateway/generate-dev-cert.sh` (Compose,
+mounted from the gitignored `api-gateway/certs/`) and `k8s/deploy.sh` (cluster, `--set-file`
+into the chart's `hopr-tls` Secret) each mint a self-signed pair on first run, so every local
+client needs `curl -k` or a clicked-through browser warning. `README.md`'s "TLS" section is
+the authoritative write-up, including what a real cert-manager + Let's Encrypt setup changes.
+`api-gateway/rate-limit-test.sh` asserts the redirect and HSTS alongside the rate limit.
+
 ## Database schema
 
 ScyllaDB schema lives in `db-migration/` as Flyway CQL migrations — see `db-migration/README.md`

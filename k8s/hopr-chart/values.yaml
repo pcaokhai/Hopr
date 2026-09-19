@@ -40,6 +40,10 @@ redis:
 # Comes from your cluster's secret store, not from values.yaml, in any real deployment.
 shortenApiKey: ""
 
+# TLS material for the ingress. REQUIRED, no default: rendering fails if it is missing.
+# k8s/deploy.sh mints a local self-signed pair and passes it with `--set-file`.
+tls: {}
+
 urlServices:
   # shortener-service and resolver-service open a CqlSession against keyspace hopr at
   # boot, so deploy.sh installs the chart once with this off, migrates, then turns it on.
@@ -50,7 +54,7 @@ config:
   resolverServerPort: "8083"
   keygenServerPort: "8081"
   frontendPort: "3000"
-  shortenerDomain: "http://localhost:8888/"
+  shortenerDomain: "https://localhost:8443/"
   # REQUIRED, no default: comma-separated SHA-256 digests of the keys accepted on POST /shorten.
   # Left empty so no deployment silently accepts the development key published in this repo --
   # shortener-service refuses to start on an empty list. Mint one per environment:

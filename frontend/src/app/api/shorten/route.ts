@@ -3,7 +3,7 @@
 // pointless as an abuse control -- so the browser posts here and this route adds the header.
 
 const UPSTREAM_BASE_URL =
-  process.env.SHORTENER_API_BASE_URL?.replace(/\/$/, "") ?? "http://hopr.localhost:80";
+  process.env.SHORTENER_API_BASE_URL?.replace(/\/$/, "") ?? "https://hopr.localhost";
 
 // The payload is a URL plus an optional alias; anything larger is abuse, and buffering it whole
 // would let a single request exhaust the frontend process.

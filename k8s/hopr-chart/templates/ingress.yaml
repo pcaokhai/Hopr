@@ -5,6 +5,9 @@ metadata:
   namespace: {{ .Values.namespace }}
   annotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
+    # TLS terminates at the ingress controller, which then talks plain HTTP to the Services
+    # over the cluster network. Plain HTTP from outside is 308-redirected to HTTPS.
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     nginx.ingress.kubernetes.io/limit-rps: "5"
     nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
     nginx.ingress.kubernetes.io/enable-cors: "true"
@@ -51,12 +54,14 @@ spec:
                   number: {{ .Values.config.shortenerServerPort }}
           # ponytail: a regex location is evaluated before every prefix location, so this
           # has to exclude the reserved literals itself. Anchored at both ends like the
-          # gateway's `^/[a-zA-Z0-9_-]{4,}$`: without the leading `^` it would claim
+          # gateway's `^/[a-zA-Z0-9_-]{4,}$` -- the controller compiles a regex path into
+          # `^<path>` itself, and the API server rejects a path that does not start with
+          # `/`, so only the `$` is written here. Unanchored it would claim
           # `/dashboard/<slug>` by matching a segment mid-path, and without the trailing `$`
           # it would claim every frontend asset under `/_next/`. The lookahead covers the
           # slash-free literals the anchors cannot. Upgrade path: split into two Ingress objects (one Exact,
           # one regex) if more reserved literal paths are added later.
-          - path: ^/(?!shorten$|dashboard$)[a-zA-Z0-9_-]{4,}$
+          - path: /(?!shorten$|dashboard$)[a-zA-Z0-9_-]{4,}$
             pathType: ImplementationSpecific
             backend:
               service:

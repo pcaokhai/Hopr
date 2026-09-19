@@ -45,3 +45,7 @@ data/
 
 # Others
 *.swp
+# Self-signed dev TLS material for the gateway (see api-gateway/generate-dev-cert.sh)
+api-gateway/certs/
+k8s/.dev-tls.crt
+k8s/.dev-tls.key

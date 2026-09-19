@@ -10,19 +10,20 @@ metadata:
   namespace: {{ .Values.namespace }}
   annotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 spec:
   ingressClassName: nginx
   rules:
     - http:
         paths:
-          - path: ^/_next/
+          - path: /_next/
             pathType: ImplementationSpecific
             backend:
               service:
                 name: frontend
                 port:
                   number: {{ .Values.config.frontendPort }}
-          - path: ^/(?:favicon\.ico|file\.svg|globe\.svg|next\.svg|vercel\.svg|window\.svg)$
+          - path: /(?:favicon\.ico|file\.svg|globe\.svg|next\.svg|vercel\.svg|window\.svg)$
             pathType: ImplementationSpecific
             backend:
               service:

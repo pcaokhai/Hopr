@@ -48,7 +48,8 @@ and `k8s/hopr-chart/templates/ingress.yaml` defines a native Kubernetes
 k8s/
   kind-config.yaml          kind cluster definition (1 node, port mapping)
   build-and-load.sh         builds jars + docker images, loads them into kind
-  deploy.sh                 full deploy: cluster, Redis, app chart, rollout wait
+  deploy.sh                 full deploy: cluster, Redis, dev API key + TLS cert,
+                            app chart, rollout wait
   hopr-chart/                Helm chart for ScyllaDB + the 4 app services + frontend + Ingress
     Chart.yaml
     values.yaml              all tunable values (ports, image tag, scylla/redis config)
@@ -56,6 +57,9 @@ k8s/
       configmap.yaml          non-secret env vars (Redis nodes, ports...)
       secret.yaml             REDIS_PASSWORD (hopr-secret) + SHORTEN_API_KEY
                               (hopr-frontend-secret, frontend only)
+      tls-secret.yaml         hopr-tls: the certificate/key the controller terminates
+                              TLS with (via --default-ssl-certificate, see "TLS");
+                              required, supplied via --set-file
       scylladb.yaml           ScyllaDB StatefulSet + headless Service
       config-server.yaml      Config Server Deployment + Service (port 8888)
       keygen-service.yaml     keygen-service Deployment + Service
@@ -153,13 +157,19 @@ check.
 ```
 
 This will, in order:
-1. Create the `kind` cluster `hopr` if it doesn't already exist
-   (`k8s/kind-config.yaml` maps the node's container port 80 → host port
-   **8888**, and labels the node `ingress-ready=true` for `ingress-nginx`).
+1. Create the `kind` cluster `hopr` if it doesn't already exist (an existing cluster is
+   reused — a stopped node container is started and waited on, while one created before
+   the HTTPS host port moved to node port 8443 is rejected with the
+   `kind delete cluster --name hopr` command to fix it, since port mappings cannot be
+   changed after creation)
+   (`k8s/kind-config.yaml` maps the node's container ports 80 → host port
+   **8888** and 8443 → **8443**, and labels the node `ingress-ready=true` for
+   `ingress-nginx`).
 2. Create the `hopr` namespace, and mint a local development API key for
    `POST /shorten` into the gitignored `k8s/.dev-api-key` if it does not exist
-   yet (reused on re-runs, so a redeploy never invalidates the key already in
-   the cluster). Both Helm invocations below get it via
+   yet, plus a self-signed TLS certificate into `k8s/.dev-tls.crt`/`.dev-tls.key`
+   (both reused on re-runs, so a redeploy never invalidates the key or cert
+   already in the cluster — see "TLS" below). Both Helm invocations below get them via
    `--set shortenApiKey=<key> --set config.shortenerApiKeyHashes=<sha256>`.
    The chart's own defaults stay empty on purpose — `shortener-service`
    refuses to start on an empty hash list, so nothing deploys with a key
@@ -203,14 +213,54 @@ kubectl rollout restart deployment/config-server deployment/keygen-service \
 detect a change on its own; `kubectl rollout restart` forces pods to be
 recreated against the freshly loaded image.
 
-### Why port 8888, not 80
+### TLS
 
-`k8s/kind-config.yaml` maps the gateway to **host port 8888**
-(`http://localhost:8888/`), not port 80. This is deliberate: this repo's own
+The ingress-nginx controller terminates TLS: it holds the certificate and private key, and
+proxies plain HTTP to the Services inside the cluster. `force-ssl-redirect` on both Ingresses
+means plain HTTP from outside is `308`-redirected to HTTPS, so nothing reaches a Service in
+cleartext from off-cluster.
+
+`deploy.sh` mints a **self-signed** certificate into `k8s/.dev-tls.crt` / `.dev-tls.key` (both
+gitignored, generated on first run and reused afterwards) and passes them to the chart with
+`helm --set-file tls.crt=... --set-file tls.key=...`, which renders the `hopr-tls` Secret.
+Both Ingresses have host-less rules, so every request is served by the controller's catch-all
+server — and a catch-all server takes its certificate from the controller's
+`--default-ssl-certificate` flag, not from an Ingress `tls:` block. `deploy.sh` therefore
+points that flag at `hopr/hopr-tls` when it patches the controller, and checks at the end
+that the certificate actually served on :8443 is that one rather than the controller's
+built-in fake certificate. (The Ingresses carry no `tls:` block, because a host-less rule never
+consults one; a real host name and a per-Ingress `tls:` block arrive together in the
+cert-manager path below.) Nothing trusts the certificate, so every `curl` below uses `-k` and a browser needs
+the warning clicked through.
+
+`deploy.sh` also patches the controller's `hsts-max-age` down to **300 seconds**. The
+controller defaults to one year, and it answers for `localhost`, so that default would pin
+every `http://localhost:PORT` on your machine — including the Next dev server — for a year,
+clearable only via `chrome://net-internals/#hsts`. This matches the Compose gateway; a real
+production deployment on a real domain raises it to the standard one year once TLS is proven
+stable.
+
+This is **dev only**. A real deployment installs cert-manager and lets it produce that same
+`hopr-tls` Secret from a Let's Encrypt certificate — see
+[TLS in the root README](../README.md#tls-transport-security) for the concept and the exact
+steps that would change. `tls.crt`/`tls.key` have no defaults: rendering the chart without
+them fails loudly rather than falling back to some other certificate.
+
+### Why port 8443 (and 8888), not 443/80
+
+`k8s/kind-config.yaml` maps the gateway to **host ports 8888 (HTTP) and 8443 (HTTPS)**
+(`https://localhost:8443/`), not ports 80/443. `deploy.sh` also moves the controller's own
+HTTPS listener to 8443 (`--https-port`, with the admission webhook shifted to 8444) and turns
+on `use-port-in-redirects`, so that `http://localhost:8888/x` redirects to
+`https://localhost:8443/x` — a port that actually serves TLS. With the stock settings the
+redirect names port 443, which nothing maps here, and the HTTP entry point would be a dead
+end. Those host mappings are fixed when the cluster is created, so an older `hopr` cluster
+has to be deleted and recreated — `deploy.sh` checks and says so rather than deploying into
+a cluster whose HTTPS port goes nowhere. This is deliberate: this repo's own
 `docker-compose.yml` stack already binds host port 80 (and 8080/8081/8083/
 27017/etc.) when running, and the two setups are meant to coexist without
 one blocking the other. If you're not running docker-compose at the same
-time, you can change `hostPort: 8888` to `80` in `k8s/kind-config.yaml` and
+time, you can change those `hostPort` values to `80`/`443` in `k8s/kind-config.yaml` and
 update `config.shortenerDomain` in `k8s/hopr-chart/values.yaml` to match.
 
 ### Tearing down
@@ -249,7 +299,7 @@ Expected: each prints JSON with `"status":"UP"` — `shortener-service` and
 ### 3. End-to-end: shorten a URL through the gateway
 
 ```bash
-curl -s -X POST http://localhost:8888/shorten \
+curl -sk -X POST https://localhost:8443/shorten \
   -H "X-API-Key: $(cat k8s/.dev-api-key)" \
   -H 'Content-Type: application/json' \
   -d '{"longUrl":"https://example.com"}'
@@ -265,12 +315,12 @@ accepted (no validation error) but persists a row with a `null` long
 URL, which then 500s on resolve — this is a pre-existing application-level
 gap, not something this k8s deployment introduced or can fix on its own.
 
-Expected response: `{"shortUrl":"http://localhost:8888/<KEY>"}`.
+Expected response: `{"shortUrl":"https://localhost:8443/<KEY>"}`.
 
 ### 4. End-to-end: resolve the shortened URL
 
 ```bash
-curl -sI http://localhost:8888/<KEY>
+curl -skI https://localhost:8443/<KEY>
 ```
 
 Expected: `HTTP/1.1 307` with a `Location: https://example.com` header —
@@ -292,18 +342,22 @@ Expected: a row per shortened URL, e.g.
 These are deliberate choices made while getting this running locally —
 recorded here so they aren't mistaken for the "correct" production design:
 
-1. **Gateway host port is 8888, not 80** — to avoid colliding with the
-   docker-compose stack's port 80, if it's running at the same time on the
-   same machine. See "Why port 8888, not 80" above.
-2. **ScyllaDB is a plain StatefulSet, not the Scylla Operator** — the
+1. **Gateway host ports are 8888/8443, not 80/443** — to avoid colliding with
+   the docker-compose stack's ports 80/443, if it's running at the same time on
+   the same machine. The controller is reconfigured to serve HTTPS on 8443 so its
+   HTTP→HTTPS redirect points at a port that is actually reachable. See "Why port
+   8443 (and 8888), not 443/80" above.
+2. **The ingress certificate is self-signed** — a real deployment issues one
+   through cert-manager + Let's Encrypt. See "TLS" above.
+3. **ScyllaDB is a plain StatefulSet, not the Scylla Operator** — the
    operator's CRDs and controller are more machinery than a local kind
    cluster warrants. See "Why Helm for the app layer" above.
-3. **Redis uses ephemeral pod storage**, matching the throwaway nature of a
+4. **Redis uses ephemeral pod storage**, matching the throwaway nature of a
    local test cluster; Scylla's volumes go with `kind delete cluster`.
-4. **Config Server uses a TCP probe, not HTTP** — because the
+5. **Config Server uses a TCP probe, not HTTP** — because the
    `config-server` module has no Spring Boot Actuator dependency, unlike
    the other three services.
-5. **Bitnami Redis Cluster images are pinned to the `bitnamilegacy/*`
+6. **Bitnami Redis Cluster images are pinned to the `bitnamilegacy/*`
    Docker Hub org** — required since 2025-08-28 for the free tier; if
    Bitnami's licensing changes again, `deploy.sh`'s `--set image.repository=`
    overrides may need updating.
