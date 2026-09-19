@@ -21,10 +21,14 @@ fi
 mkdir -p "$OUT_DIR"
 # The SAN list, not the CN, is what clients match on; cover every name the gateway is
 # reached by locally. 825 days is the maximum lifetime Chrome accepts for a leaf cert.
-(umask 077 && openssl req -x509 -newkey rsa:2048 -nodes -days 825 -sha256 \
+openssl_err=$( (umask 077 && openssl req -x509 -newkey rsa:2048 -nodes -days 825 -sha256 \
   -keyout "$KEY" -out "$CRT" \
   -subj "/CN=hopr.localhost/O=Hopr local development (self-signed, do not trust)" \
-  -addext "subjectAltName=DNS:hopr.localhost,DNS:localhost,IP:127.0.0.1" 2>/dev/null)
+  -addext "subjectAltName=DNS:hopr.localhost,DNS:localhost,IP:127.0.0.1" 2>&1 >/dev/null) ) || {
+  echo "openssl failed to mint the dev certificate:" >&2
+  echo "$openssl_err" >&2
+  exit 1
+}
 chmod 644 "$CRT"
 
 echo "wrote self-signed dev certificate: $CRT"

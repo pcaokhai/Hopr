@@ -237,7 +237,12 @@ them fails loudly rather than falling back to some other certificate.
 ### Why port 8443 (and 8888), not 443/80
 
 `k8s/kind-config.yaml` maps the gateway to **host ports 8888 (HTTP) and 8443 (HTTPS)**
-(`https://localhost:8443/`), not ports 80/443. This is deliberate: this repo's own
+(`https://localhost:8443/`), not ports 80/443. `deploy.sh` also moves the controller's own
+HTTPS listener to 8443 (`--https-port`, with the admission webhook shifted to 8444) and turns
+on `use-port-in-redirects`, so that `http://localhost:8888/x` redirects to
+`https://localhost:8443/x` — a port that actually serves TLS. With the stock settings the
+redirect names port 443, which nothing maps here, and the HTTP entry point would be a dead
+end. This is deliberate: this repo's own
 `docker-compose.yml` stack already binds host port 80 (and 8080/8081/8083/
 27017/etc.) when running, and the two setups are meant to coexist without
 one blocking the other. If you're not running docker-compose at the same
@@ -325,7 +330,9 @@ recorded here so they aren't mistaken for the "correct" production design:
 
 1. **Gateway host ports are 8888/8443, not 80/443** — to avoid colliding with
    the docker-compose stack's ports 80/443, if it's running at the same time on
-   the same machine. See "Why port 8443 (and 8888), not 443/80" above.
+   the same machine. The controller is reconfigured to serve HTTPS on 8443 so its
+   HTTP→HTTPS redirect points at a port that is actually reachable. See "Why port
+   8443 (and 8888), not 443/80" above.
 2. **The ingress certificate is self-signed** — a real deployment issues one
    through cert-manager + Let's Encrypt. See "TLS" above.
 3. **ScyllaDB is a plain StatefulSet, not the Scylla Operator** — the
