@@ -17,7 +17,14 @@ if kind get clusters | grep -q '^hopr$'; then
     exit 1
   fi
   if [ "$(docker inspect -f '{{.State.Running}}' hopr-control-plane)" != "true" ]; then
+    # The container is running long before the kubelet and API server are, so everything
+    # below would fail with "connection refused" without this wait.
     docker start hopr-control-plane >/dev/null
+    for _ in $(seq 1 60); do
+      kubectl wait --for=condition=Ready node --all --timeout=10s >/dev/null 2>&1 && break
+      sleep 2
+    done
+    kubectl wait --for=condition=Ready node --all --timeout=60s
   fi
 else
   kind create cluster --config k8s/kind-config.yaml
@@ -69,6 +76,11 @@ helm upgrade --install hopr-redis bitnami/redis-cluster \
 
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.3/deploy/static/provider/kind/deploy.yaml
 
+# Both Ingresses have host-less rules, so every request lands on the controller's catch-all
+# server, and a catch-all server takes its certificate from --default-ssl-certificate, never
+# from an Ingress `tls:` block. Without this the cluster would serve the controller's own
+# fake certificate and the minted hopr-tls pair would sit unused.
+#
 # Serve HTTPS on 8443 inside the node so the host port kind maps (k8s/kind-config.yaml) and
 # the port nginx names in its HTTP->HTTPS redirect are the same number: the redirect target
 # port comes from --https-port, and with the stock 443 it would point at a port no client can
@@ -76,6 +88,7 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/cont
 kubectl -n ingress-nginx patch deployment ingress-nginx-controller --type json -p '[
   {"op":"replace","path":"/spec/template/spec/containers/0/args/5","value":"--validating-webhook=:8444"},
   {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--https-port=8443"},
+  {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--default-ssl-certificate=hopr/hopr-tls"},
   {"op":"replace","path":"/spec/template/spec/containers/0/ports/1/containerPort","value":8443},
   {"op":"replace","path":"/spec/template/spec/containers/0/ports/1/hostPort","value":8443},
   {"op":"replace","path":"/spec/template/spec/containers/0/ports/2/containerPort","value":8444}
@@ -124,6 +137,18 @@ kubectl rollout status deployment/keygen-service -n hopr --timeout=120s
 kubectl rollout status deployment/shortener-service -n hopr --timeout=120s
 kubectl rollout status deployment/resolver-service -n hopr --timeout=120s
 kubectl rollout status deployment/frontend -n hopr --timeout=120s
+
+# The controller reloads when the hopr-tls Secret appears, so on a fresh install the
+# catch-all server can still be on the fake certificate for a moment.
+for _ in $(seq 1 30); do
+  served=$(echo | openssl s_client -connect localhost:8443 2>/dev/null | openssl x509 -noout -subject 2>/dev/null || true)
+  case "$served" in *"Hopr local development"*) break ;; esac
+  sleep 2
+done
+case "$served" in
+  *"Hopr local development"*) echo "ingress is serving the hopr-tls certificate: $served" ;;
+  *) echo "the ingress is not serving the hopr-tls certificate (got: ${served:-nothing})" >&2; exit 1 ;;
+esac
 
 # -k: the certificate above is self-signed, so no client trusts it without an override.
 echo "Hopr is up. Try: curl -k -X POST https://localhost:8443/shorten -d '{\"longUrl\":\"https://example.com\"}' -H 'Content-Type: application/json' -H \"X-API-Key: $SHORTEN_API_KEY\""

@@ -161,7 +161,7 @@ This will, in order:
    with the `kind delete cluster --name hopr` command to fix it — port mappings cannot be
    changed after creation)
    (`k8s/kind-config.yaml` maps the node's container ports 80 → host port
-   **8888** and 443 → **8443**, and labels the node `ingress-ready=true` for
+   **8888** and 8443 → **8443**, and labels the node `ingress-ready=true` for
    `ingress-nginx`).
 2. Create the `hopr` namespace, and mint a local development API key for
    `POST /shorten` into the gitignored `k8s/.dev-api-key` if it does not exist
@@ -220,8 +220,15 @@ cleartext from off-cluster.
 
 `deploy.sh` mints a **self-signed** certificate into `k8s/.dev-tls.crt` / `.dev-tls.key` (both
 gitignored, generated on first run and reused afterwards) and passes them to the chart with
-`helm --set-file tls.crt=... --set-file tls.key=...`, which renders the `hopr-tls` Secret both
-Ingresses reference. Nothing trusts it, so every `curl` below uses `-k` and a browser needs
+`helm --set-file tls.crt=... --set-file tls.key=...`, which renders the `hopr-tls` Secret.
+Both Ingresses have host-less rules, so every request is served by the controller's catch-all
+server — and a catch-all server takes its certificate from the controller's
+`--default-ssl-certificate` flag, not from an Ingress `tls:` block. `deploy.sh` therefore
+points that flag at `hopr/hopr-tls` when it patches the controller, and checks at the end
+that the certificate actually served on :8443 is that one rather than the controller's
+built-in fake certificate. (The `tls:` blocks in the Ingresses become the operative reference
+the moment the rules gain a real host name — which is what the cert-manager path below
+assumes.) Nothing trusts the certificate, so every `curl` below uses `-k` and a browser needs
 the warning clicked through.
 
 `deploy.sh` also patches the controller's `hsts-max-age` down to **300 seconds**. The
