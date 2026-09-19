@@ -15,6 +15,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.data.cassandra.core.CassandraOperations;
+import org.springframework.data.cassandra.core.EntityWriteResult;
+import org.springframework.data.cassandra.core.InsertOptions;
 import org.springframework.data.cassandra.core.query.Query;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
@@ -83,7 +85,7 @@ class LinkManagementUseCaseTest {
     @Test
     void update_changesLongUrlAndEvictsCache() {
         when(urlRepository.findById("abc123")).thenReturn(Optional.of(mapping()));
-        when(urlRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(cassandra.insert(any(UrlMapping.class))).thenAnswer(invocation -> invocation.getArgument(0));
         Cache cache = mock(Cache.class);
         when(cacheManager.getCache("keys")).thenReturn(cache);
 
@@ -91,6 +93,23 @@ class LinkManagementUseCaseTest {
 
         assertEquals("https://updated.example.com", response.longUrl());
         verify(cache).evict("abc123");
+    }
+
+    @Test
+    void update_withExpiresInSeconds_savesThroughTtlAwarePath() {
+        when(urlRepository.findById("abc123")).thenReturn(Optional.of(mapping()));
+        @SuppressWarnings("unchecked")
+        EntityWriteResult<UrlMapping> writeResult = mock(EntityWriteResult.class);
+        when(cassandra.insert(any(UrlMapping.class), any(InsertOptions.class))).thenAnswer(invocation -> {
+            when(writeResult.getEntity()).thenReturn(invocation.getArgument(0));
+            return writeResult;
+        });
+        Cache cache = mock(Cache.class);
+        when(cacheManager.getCache("keys")).thenReturn(cache);
+
+        useCase.update("abc123", new UpdateLinkRequest(null, 3600L));
+
+        verify(cassandra).insert(any(UrlMapping.class), any(InsertOptions.class));
     }
 
     @Test
