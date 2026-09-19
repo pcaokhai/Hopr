@@ -57,8 +57,9 @@ k8s/
       configmap.yaml          non-secret env vars (Redis nodes, ports...)
       secret.yaml             REDIS_PASSWORD (hopr-secret) + SHORTEN_API_KEY
                               (hopr-frontend-secret, frontend only)
-      tls-secret.yaml         hopr-tls: the certificate/key the Ingresses terminate
-                              TLS with; required, supplied via --set-file
+      tls-secret.yaml         hopr-tls: the certificate/key the controller terminates
+                              TLS with (via --default-ssl-certificate, see "TLS");
+                              required, supplied via --set-file
       scylladb.yaml           ScyllaDB StatefulSet + headless Service
       config-server.yaml      Config Server Deployment + Service (port 8888)
       keygen-service.yaml     keygen-service Deployment + Service
@@ -157,8 +158,9 @@ check.
 
 This will, in order:
 1. Create the `kind` cluster `hopr` if it doesn't already exist (an existing cluster is
-   reused, but one created before the HTTPS host port moved to node port 8443 is rejected
-   with the `kind delete cluster --name hopr` command to fix it — port mappings cannot be
+   reused — a stopped node container is started and waited on, while one created before
+   the HTTPS host port moved to node port 8443 is rejected with the
+   `kind delete cluster --name hopr` command to fix it, since port mappings cannot be
    changed after creation)
    (`k8s/kind-config.yaml` maps the node's container ports 80 → host port
    **8888** and 8443 → **8443**, and labels the node `ingress-ready=true` for
