@@ -1,0 +1,49 @@
+{{- if .Values.urlServices.enabled }}
+{{- if .Values.shortenerService.autoscaling.enabled }}
+# Scales on CPU utilization only: no custom-metrics-adapter (e.g. Prometheus Adapter) is
+# wired up for this chart yet, even though Phase 2 already exports request-rate/latency
+# metrics -- see the PR description for what a request-rate-based HPA would additionally
+# need. Requires metrics-server in the cluster; see the PR description for kind setup.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: shortener-service
+  namespace: {{ .Values.namespace }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: shortener-service
+  minReplicas: {{ .Values.shortenerService.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.shortenerService.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.shortenerService.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+---
+{{- if .Values.resolverService.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: resolver-service
+  namespace: {{ .Values.namespace }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: resolver-service
+  minReplicas: {{ .Values.resolverService.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.resolverService.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.resolverService.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}

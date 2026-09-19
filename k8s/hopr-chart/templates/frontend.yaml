@@ -4,7 +4,7 @@ metadata:
   name: frontend
   namespace: {{ .Values.namespace }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.frontend.replicaCount }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -34,6 +34,8 @@ spec:
                 secretKeyRef:
                   name: hopr-frontend-secret
                   key: SHORTEN_API_KEY
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
           readinessProbe:
             httpGet:
               path: /
