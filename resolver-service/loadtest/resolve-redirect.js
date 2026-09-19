@@ -6,8 +6,8 @@
 //
 // Load level: 20 VUs sustained for 30s (after a 5s ramp-up), ~20 concurrent resolvers.
 // That is a deliberately small profile for a learning project's single-instance Compose
-// stack, not a production capacity test — see docs/contracts/README.md's sibling section
-// in the PR description for the reasoning and the measured numbers.
+// stack, not a production capacity test — see README.md's latency claim and AGENTS.md's
+// "Load testing" section for the measured numbers and reproduction cadence.
 import http from 'k6/http';
 import { check } from 'k6';
 
