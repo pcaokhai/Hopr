@@ -74,6 +74,10 @@ from `api-gateway/certs/`, and `docker compose up` fails without it:
 ./api-gateway/generate-dev-cert.sh
 ```
 
+Run it before `docker compose up`: Docker creates a missing `api-gateway/certs` itself (owned
+by root on Linux) rather than erroring, and the gateway then crash-loops on "cannot load
+certificate" — if that happens, remove the directory and re-run the script.
+
 This certificate is **self-signed and for local development only**: nothing trusts it, so
 `curl` needs `-k` and a browser will show a warning you must click through ("Advanced" →
 "Proceed"). A real deployment must serve a CA-issued certificate — see

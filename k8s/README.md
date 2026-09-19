@@ -221,6 +221,13 @@ gitignored, generated on first run and reused afterwards) and passes them to the
 Ingresses reference. Nothing trusts it, so every `curl` below uses `-k` and a browser needs
 the warning clicked through.
 
+`deploy.sh` also patches the controller's `hsts-max-age` down to **300 seconds**. The
+controller defaults to one year, and it answers for `localhost`, so that default would pin
+every `http://localhost:PORT` on your machine — including the Next dev server — for a year,
+clearable only via `chrome://net-internals/#hsts`. This matches the Compose gateway; a real
+production deployment on a real domain raises it to the standard one year once TLS is proven
+stable.
+
 This is **dev only**. A real deployment installs cert-manager and lets it produce that same
 `hopr-tls` Secret from a Let's Encrypt certificate — see
 [TLS in the root README](../README.md#tls-transport-security) for the concept and the exact

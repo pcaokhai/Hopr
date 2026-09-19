@@ -51,6 +51,12 @@ helm upgrade --install hopr-redis bitnami/redis-cluster \
 
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.3/deploy/static/provider/kind/deploy.yaml
 
+# The controller's default HSTS max-age is one year, and it answers for `localhost`, which
+# would pin every http://localhost:PORT on the developer's machine for that long. Same dev
+# value as the Compose gateway (api-gateway/security-headers.conf); HSTS itself stays on.
+kubectl -n ingress-nginx patch configmap ingress-nginx-controller --type merge \
+  -p '{"data":{"hsts-max-age":"300"}}'
+
 kubectl wait --namespace ingress-nginx \
   --for=condition=ready pod \
   --selector=app.kubernetes.io/component=controller \
