@@ -60,3 +60,73 @@ config:
   # shortener-service refuses to start on an empty list. Mint one per environment:
   #   KEY=$(openssl rand -hex 32); printf %s "$KEY" | shasum -a 256
   shortenerApiKeyHashes: ""
+
+# Per-service replica counts and resource requests/limits, plus HPA settings for the two
+# request-serving hot paths. These are starter numbers, not measured production budgets --
+# see the PR description for the reasoning and how to tune them from real load.
+#
+# All four backend services run on eclipse-temurin:25-jre, whose JVM has been
+# container-aware (respects cgroup memory/cpu limits) by default since JDK 10, so no
+# -Xmx is set; -XX:MaxRAMPercentage below caps the heap at a share of the *container
+# memory limit*, leaving headroom for metaspace, thread stacks and native buffers.
+shortenerService:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 384Mi
+    limits:
+      cpu: 750m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+
+resolverService:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 384Mi
+    limits:
+      cpu: 750m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+
+keygenService:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 200m
+      memory: 320Mi
+    limits:
+      cpu: 500m
+      memory: 448Mi
+
+# config-server is a single Spring Cloud Config instance the other services read config
+# from at boot; it isn't in either request-serving hot path, so no HPA here.
+configServer:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 150m
+      memory: 256Mi
+    limits:
+      cpu: 400m
+      memory: 384Mi
+
+frontend:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi

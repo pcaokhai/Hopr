@@ -51,6 +51,8 @@ k8s/
   deploy.sh                 full deploy: cluster, Redis, dev API key + TLS cert,
                             app chart, rollout wait
   hopr-chart/                Helm chart for ScyllaDB + the 4 app services + frontend + Ingress
+  autoscaling-test.sh        drives load against shortener/resolver to confirm resource
+                            requests are set and the HPAs scale replicas up under load
     Chart.yaml
     values.yaml              all tunable values (ports, image tag, scylla/redis config)
     templates/
@@ -71,6 +73,8 @@ k8s/
                               controller
       ingress-static.yaml     second Ingress for the frontend's static assets,
                               exempt from the write-path rate limit
+      hpa.yaml                 HorizontalPodAutoscalers for shortener-service and
+                              resolver-service (CPU-utilization based)
 ```
 
 ## Why Helm for the app layer, and why ScyllaDB isn't a Bitnami chart
@@ -262,6 +266,15 @@ a cluster whose HTTPS port goes nowhere. This is deliberate: this repo's own
 one blocking the other. If you're not running docker-compose at the same
 time, you can change those `hostPort` values to `80`/`443` in `k8s/kind-config.yaml` and
 update `config.shortenerDomain` in `k8s/hopr-chart/values.yaml` to match.
+
+### Resource requests/limits and autoscaling
+
+Every backend Deployment's `replicaCount` and `resources.requests`/`limits` are parameterized
+in `k8s/hopr-chart/values.yaml`, whose comments explain the starter numbers, the JVM
+container-awareness caveat, and why the scheduler/HPA need requests specifically. `shortener-service`
+and `resolver-service` also get a `HorizontalPodAutoscaler` (`templates/hpa.yaml`, CPU-utilization
+based) behind `<service>.autoscaling.enabled`. Verify both the requests and the scaling behavior
+against a running cluster with `k8s/autoscaling-test.sh`.
 
 ### Tearing down
 

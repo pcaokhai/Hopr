@@ -12,7 +12,7 @@ spec:
     rollingUpdate:
       maxUnavailable: 0
       maxSurge: 1
-  replicas: 1
+  replicas: {{ .Values.configServer.replicaCount }}
   selector:
     matchLabels:
       app: config-server
@@ -31,6 +31,14 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: 8888
+          env:
+            # eclipse-temurin:25-jre is container-aware by default; cap the heap at a
+            # share of the container memory *limit* below, leaving room for metaspace,
+            # thread stacks and native buffers.
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=75.0"
+          resources:
+            {{- toYaml .Values.configServer.resources | nindent 12 }}
           # Removing a pod from the Service endpoints and telling it to shut down happen
           # in parallel, and a starting service's spring.config.import fetch can still be
           # routed here in that window. Sleeping in preStop delays SIGTERM long enough for

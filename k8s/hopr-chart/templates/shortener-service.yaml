@@ -5,7 +5,9 @@ metadata:
   name: shortener-service
   namespace: {{ .Values.namespace }}
 spec:
-  replicas: 1
+  # An HPA (see hpa.yaml below) manages replica count from here on; this is only the
+  # starting point before the HPA's first scaling decision.
+  replicas: {{ .Values.shortenerService.replicaCount }}
   # The start-first rolling update the old Swarm stack.yml asked for: bring the new pod
   # up and Ready before any old pod goes away. maxUnavailable: 0 states that at every
   # replica count rather than relying on 25%-of-1 rounding to zero.
@@ -32,11 +34,19 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.config.shortenerServerPort }}
+          env:
+            # eclipse-temurin:25-jre is container-aware by default; cap the heap at a
+            # share of the container memory *limit* below, leaving room for metaspace,
+            # thread stacks and native buffers.
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=75.0"
           envFrom:
             - configMapRef:
                 name: hopr-config
             - secretRef:
                 name: hopr-secret
+          resources:
+            {{- toYaml .Values.shortenerService.resources | nindent 12 }}
           # Removing a pod from the Service endpoints and telling it to shut down happen
           # in parallel, and ingress-nginx needs a moment to observe the removal. Without
           # this pause the pod starts refusing connections while nginx is still routing to
