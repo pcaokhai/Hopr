@@ -74,34 +74,41 @@ helm upgrade --install hopr-redis bitnami/redis-cluster \
   --set metrics.image.repository=bitnamilegacy/redis-exporter \
   --wait --timeout 5m
 
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.3/deploy/static/provider/kind/deploy.yaml
+# Re-applying the upstream manifest over an already-patched controller merges its webhook
+# port (8443) back in beside the patched one and the Deployment is rejected for the duplicate
+# port name, so install and patch it only once.
+if ! kubectl -n ingress-nginx get deployment ingress-nginx-controller \
+  -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null \
+  | grep -q -- '--default-ssl-certificate=hopr/hopr-tls'; then
+  kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.3/deploy/static/provider/kind/deploy.yaml
 
-# Both Ingresses have host-less rules, so every request lands on the controller's catch-all
-# server, and a catch-all server takes its certificate from --default-ssl-certificate, never
-# from an Ingress `tls:` block. Without this the cluster would serve the controller's own
-# fake certificate and the minted hopr-tls pair would sit unused.
-#
-# Serve HTTPS on 8443 inside the node so the host port kind maps (k8s/kind-config.yaml) and
-# the port nginx names in its HTTP->HTTPS redirect are the same number: the redirect target
-# port comes from --https-port, and with the stock 443 it would point at a port no client can
-# reach here. The admission webhook owns 8443 by default, so it moves to 8444.
-kubectl -n ingress-nginx patch deployment ingress-nginx-controller --type json -p '[
-  {"op":"replace","path":"/spec/template/spec/containers/0/args/5","value":"--validating-webhook=:8444"},
-  {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--https-port=8443"},
-  {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--default-ssl-certificate=hopr/hopr-tls"},
-  {"op":"replace","path":"/spec/template/spec/containers/0/ports/1/containerPort","value":8443},
-  {"op":"replace","path":"/spec/template/spec/containers/0/ports/1/hostPort","value":8443},
-  {"op":"replace","path":"/spec/template/spec/containers/0/ports/2/containerPort","value":8444}
-]'
+  # Both Ingresses have host-less rules, so every request lands on the controller's catch-all
+  # server, and a catch-all server takes its certificate from --default-ssl-certificate, never
+  # from an Ingress `tls:` block. Without this the cluster would serve the controller's own
+  # fake certificate and the minted hopr-tls pair would sit unused.
+  #
+  # Serve HTTPS on 8443 inside the node so the host port kind maps (k8s/kind-config.yaml) and
+  # the port nginx names in its HTTP->HTTPS redirect are the same number: the redirect target
+  # port comes from --https-port, and with the stock 443 it would point at a port no client can
+  # reach here. The admission webhook owns 8443 by default, so it moves to 8444.
+  kubectl -n ingress-nginx patch deployment ingress-nginx-controller --type json -p '[
+    {"op":"replace","path":"/spec/template/spec/containers/0/args/5","value":"--validating-webhook=:8444"},
+    {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--https-port=8443"},
+    {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--default-ssl-certificate=hopr/hopr-tls"},
+    {"op":"replace","path":"/spec/template/spec/containers/0/ports/1/containerPort","value":8443},
+    {"op":"replace","path":"/spec/template/spec/containers/0/ports/1/hostPort","value":8443},
+    {"op":"replace","path":"/spec/template/spec/containers/0/ports/2/containerPort","value":8444}
+  ]'
 
-# use-port-in-redirects makes the redirect spell out that port (https://localhost:8443/...)
-# instead of dropping it and implying 443.
-#
-# The controller's default HSTS max-age is one year, and it answers for `localhost`, which
-# would pin every http://localhost:PORT on the developer's machine for that long. Same dev
-# value as the Compose gateway (api-gateway/security-headers.conf); HSTS itself stays on.
-kubectl -n ingress-nginx patch configmap ingress-nginx-controller --type merge \
-  -p '{"data":{"hsts-max-age":"300","use-port-in-redirects":"true"}}'
+  # use-port-in-redirects makes the redirect spell out that port (https://localhost:8443/...)
+  # instead of dropping it and implying 443.
+  #
+  # The controller's default HSTS max-age is one year, and it answers for `localhost`, which
+  # would pin every http://localhost:PORT on the developer's machine for that long. Same dev
+  # value as the Compose gateway (api-gateway/security-headers.conf); HSTS itself stays on.
+  kubectl -n ingress-nginx patch configmap ingress-nginx-controller --type merge \
+    -p '{"data":{"hsts-max-age":"300","use-port-in-redirects":"true"}}'
+fi
 
 kubectl -n ingress-nginx rollout status deployment/ingress-nginx-controller --timeout=180s
 
