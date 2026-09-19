@@ -18,6 +18,7 @@ package com.pcaokhai.common.url.model.dto;
 import com.pcaokhai.common.url.model.dto.validation.ParseableUri;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.io.Serializable;
@@ -26,11 +27,16 @@ import java.io.Serializable;
  * Represents a request to shorten a URL.
  * This record encapsulates the long URL to be shortened and an optional alias for the shortened URL.
  *
- * @param longUrl The original long URL that needs to be shortened. Restricted to absolute
- *                {@code http}/{@code https} URLs so a short link can never be turned into a
- *                redirect to {@code javascript:}, {@code data:} or any other scheme, and capped
- *                at {@value #MAX_LONG_URL_LENGTH} characters, the de-facto browser/CDN URL limit.
- * @param alias   An optional alias for the shortened URL, which can be used instead of a generated key.
+ * @param longUrl           The original long URL that needs to be shortened. Restricted to absolute
+ *                          {@code http}/{@code https} URLs so a short link can never be turned into a
+ *                          redirect to {@code javascript:}, {@code data:} or any other scheme, and capped
+ *                          at {@value #MAX_LONG_URL_LENGTH} characters, the de-facto browser/CDN URL limit.
+ * @param alias             An optional alias for the shortened URL, which can be used instead of a generated key.
+ * @param expiresInSeconds  Optional lifetime for the short link, in seconds from creation. A relative
+ *                          duration is used instead of an absolute timestamp so the client never has to
+ *                          reason about clock skew against the server ("expire in an hour" vs. "expire at
+ *                          this exact instant on your clock"). Omitting it means the link never expires,
+ *                          preserving the pre-TTL default behavior.
  */
 public record ShortenRequest(
         @NotBlank(message = "longUrl must not be blank")
@@ -38,8 +44,15 @@ public record ShortenRequest(
         @Pattern(regexp = HTTP_URL, message = "longUrl must be an absolute http or https URL")
         @ParseableUri(message = "longUrl must be a parseable URI")
         String longUrl,
-        String alias
+        String alias,
+        @Positive(message = "expiresInSeconds must be a positive number of seconds")
+        Long expiresInSeconds
 ) implements Serializable {
+
+    /** Convenience constructor for a link that never expires. */
+    public ShortenRequest(String longUrl, String alias) {
+        this(longUrl, alias, null);
+    }
 
     /** Longest URL we accept: the practical ceiling browsers and CDNs impose on a URL. */
     public static final int MAX_LONG_URL_LENGTH = 2048;

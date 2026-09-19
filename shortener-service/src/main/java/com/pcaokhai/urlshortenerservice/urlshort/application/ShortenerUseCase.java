@@ -24,6 +24,8 @@ import com.pcaokhai.urlshortenerservice.urlshort.exception.AliasNotAvailableExce
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.Instant;
+
 /**
  * Use case for shortening URLs.
  * This service handles the logic for creating a short URL from a long URL and an optional alias.
@@ -65,14 +67,14 @@ public class ShortenerUseCase {
     private String claimShortKey(ShortenRequest request) {
         String alias = request.alias();
         if (StringUtils.hasText(alias)) {
-            if (!dbCacheSaver.saveUrlMappingIfAbsent(buildMapping(alias, request))) {
+            if (!dbCacheSaver.saveUrlMappingIfAbsent(buildMapping(alias, request), request.expiresInSeconds())) {
                 throw new AliasNotAvailableException("Alias " + alias + " is not available");
             }
             return alias;
         }
         for (int attempt = 0; attempt < MAX_GENERATED_KEY_ATTEMPTS; attempt++) {
             String shortKey = keyGenResolver.resolveShortKey();
-            if (dbCacheSaver.saveUrlMappingIfAbsent(buildMapping(shortKey, request))) {
+            if (dbCacheSaver.saveUrlMappingIfAbsent(buildMapping(shortKey, request), request.expiresInSeconds())) {
                 return shortKey;
             }
         }
@@ -81,7 +83,10 @@ public class ShortenerUseCase {
     }
 
     private UrlMapping buildMapping(String shortKey, ShortenRequest request) {
-        return new UrlMapping(shortKey, request.longUrl(), request.alias());
+        Instant expiresAt = request.expiresInSeconds() == null
+                ? null
+                : Instant.now().plusSeconds(request.expiresInSeconds());
+        return new UrlMapping(shortKey, request.longUrl(), request.alias(), expiresAt);
     }
 
     private ShortenResponse buildShortUrl(String shortKey) {

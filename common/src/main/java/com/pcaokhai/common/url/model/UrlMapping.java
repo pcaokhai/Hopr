@@ -21,6 +21,7 @@ import org.springframework.data.cassandra.core.mapping.PrimaryKey;
 import org.springframework.data.cassandra.core.mapping.Table;
 
 import java.io.Serializable;
+import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -44,13 +45,25 @@ public class UrlMapping implements Serializable {
     @Column("alias")
     private String alias;
 
+    // Read-visibility only: the row's actual removal is driven by ScyllaDB's own per-row TTL
+    // set on the INSERT (see shortener-service's DbCacheSaver), not by this column. Kept in
+    // sync with that TTL so a response or future management UI can show when a link expires
+    // without needing a second, TTL-derived source of truth.
+    @Column("expires_at")
+    private Instant expiresAt;
+
     public UrlMapping() {}
 
-    @PersistenceCreator
     public UrlMapping(String shortKey, String longUrl, String alias) {
+        this(shortKey, longUrl, alias, null);
+    }
+
+    @PersistenceCreator
+    public UrlMapping(String shortKey, String longUrl, String alias, Instant expiresAt) {
         this.shortKey = shortKey;
         this.longUrl = longUrl;
         this.alias = alias;
+        this.expiresAt = expiresAt;
     }
 
     public String getShortKey() {
@@ -63,6 +76,8 @@ public class UrlMapping implements Serializable {
 
     public String getAlias() {return alias;}
 
+    public Instant getExpiresAt() {return expiresAt;}
+
     public void setShortKey(String shortKey) {
         this.shortKey = shortKey;
     }
@@ -71,15 +86,18 @@ public class UrlMapping implements Serializable {
 
     public void setAlias(String alias) {this.alias = alias;}
 
+    public void setExpiresAt(Instant expiresAt) {this.expiresAt = expiresAt;}
+
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
         UrlMapping that = (UrlMapping) o;
-        return Objects.equals(shortKey, that.shortKey) && Objects.equals(longUrl, that.longUrl) && Objects.equals(alias, that.alias);
+        return Objects.equals(shortKey, that.shortKey) && Objects.equals(longUrl, that.longUrl)
+                && Objects.equals(alias, that.alias) && Objects.equals(expiresAt, that.expiresAt);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(shortKey, longUrl, alias);
+        return Objects.hash(shortKey, longUrl, alias, expiresAt);
     }
 }

@@ -41,7 +41,7 @@ public class ShortenerUseCaseTest {
         String longUrl = "https://example.com";
         ShortenRequest req = new ShortenRequest(longUrl, alias);
         when(domainProperties.toString()).thenReturn("https://short.ly/");
-        when(dbCacheSaver.saveUrlMappingIfAbsent(any())).thenReturn(true);
+        when(dbCacheSaver.saveUrlMappingIfAbsent(any(), any())).thenReturn(true);
         ShortenResponse resp = useCase.shorten(req);
         assertEquals("https://short.ly/" + alias, resp.shortUrl());
         verify(aliasValidation).validate(alias);
@@ -51,7 +51,8 @@ public class ShortenerUseCaseTest {
                         mapping.getShortKey().equals(alias) &&
                                 mapping.getLongUrl().equals(longUrl) &&
                                 mapping.getAlias().equals(alias)
-                )
+                ),
+                any()
         );
     }
 
@@ -59,9 +60,9 @@ public class ShortenerUseCaseTest {
     void shorten_whenAliasAlreadyClaimed_throwsAliasNotAvailable() {
         String alias = "taken";
         ShortenRequest req = new ShortenRequest("https://example.com", alias);
-        when(dbCacheSaver.saveUrlMappingIfAbsent(any())).thenReturn(false);
+        when(dbCacheSaver.saveUrlMappingIfAbsent(any(), any())).thenReturn(false);
         assertThrows(AliasNotAvailableException.class, () -> useCase.shorten(req));
-        verify(dbCacheSaver).saveUrlMappingIfAbsent(any());
+        verify(dbCacheSaver).saveUrlMappingIfAbsent(any(), any());
         verifyNoInteractions(keyGenResolver);
     }
 
@@ -83,7 +84,7 @@ public class ShortenerUseCaseTest {
         ShortenRequest req = new ShortenRequest("https://foo.com", null);
         when(keyGenResolver.resolveShortKey()).thenReturn(generated);
         when(domainProperties.toString()).thenReturn("https://short.ly/");
-        when(dbCacheSaver.saveUrlMappingIfAbsent(any())).thenReturn(true);
+        when(dbCacheSaver.saveUrlMappingIfAbsent(any(), any())).thenReturn(true);
         ShortenResponse resp = useCase.shorten(req);
         assertEquals("https://short.ly/" + generated, resp.shortUrl());
         verify(aliasValidation).validate(null);
@@ -92,7 +93,8 @@ public class ShortenerUseCaseTest {
                         mapping.getShortKey().equals(generated) &&
                                 mapping.getLongUrl().equals("https://foo.com") &&
                                 mapping.getAlias() == null
-                )
+                ),
+                any()
         );
     }
 
@@ -101,18 +103,35 @@ public class ShortenerUseCaseTest {
         ShortenRequest req = new ShortenRequest("https://foo.com", null);
         when(keyGenResolver.resolveShortKey()).thenReturn("taken", "free");
         when(domainProperties.toString()).thenReturn("https://short.ly/");
-        when(dbCacheSaver.saveUrlMappingIfAbsent(any())).thenReturn(false, true);
+        when(dbCacheSaver.saveUrlMappingIfAbsent(any(), any())).thenReturn(false, true);
         assertEquals("https://short.ly/free", useCase.shorten(req).shortUrl());
         verify(keyGenResolver, times(2)).resolveShortKey();
+    }
+
+    @Test
+    void shorten_withExpiresInSeconds_setsExpiresAtAndPassesTtlThrough() {
+        String alias = "expiring";
+        long ttlSeconds = 60L;
+        ShortenRequest req = new ShortenRequest("https://example.com", alias, ttlSeconds);
+        when(domainProperties.toString()).thenReturn("https://short.ly/");
+        when(dbCacheSaver.saveUrlMappingIfAbsent(any(), any())).thenReturn(true);
+
+        useCase.shorten(req);
+
+        verify(dbCacheSaver).saveUrlMappingIfAbsent(
+                argThat(mapping -> mapping.getExpiresAt() != null
+                        && mapping.getExpiresAt().isAfter(java.time.Instant.now())),
+                eq(ttlSeconds)
+        );
     }
 
     @Test
     void shorten_whenEveryGeneratedKeyCollides_fails() {
         ShortenRequest req = new ShortenRequest("https://foo.com", null);
         when(keyGenResolver.resolveShortKey()).thenReturn("taken");
-        when(dbCacheSaver.saveUrlMappingIfAbsent(any())).thenReturn(false);
+        when(dbCacheSaver.saveUrlMappingIfAbsent(any(), any())).thenReturn(false);
         assertThrows(IllegalStateException.class, () -> useCase.shorten(req));
-        verify(dbCacheSaver, times(5)).saveUrlMappingIfAbsent(any());
+        verify(dbCacheSaver, times(5)).saveUrlMappingIfAbsent(any(), any());
     }
 
 }

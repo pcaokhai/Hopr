@@ -60,4 +60,20 @@ public class DbCacheSaverTest {
         assertFalse(dbCacheSaver.saveUrlMappingIfAbsent(urlMapping));
         verifyNoInteractions(cacheManager);
     }
-} 
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void saveIfAbsent_withTtl_insertsWithTtlOptionAndCaches() {
+        when(cacheManager.getCache("keys")).thenReturn(cache);
+        UrlMapping urlMapping = new UrlMapping("abc123", "https://example.com", "abc123");
+        EntityWriteResult<UrlMapping> result = mock(EntityWriteResult.class);
+        when(result.wasApplied()).thenReturn(true);
+        when(cassandra.insert(eq(urlMapping), any(InsertOptions.class))).thenReturn(result);
+
+        assertTrue(dbCacheSaver.saveUrlMappingIfAbsent(urlMapping, 60L));
+
+        verify(cassandra).insert(eq(urlMapping), argThat((InsertOptions options) -> options.getTtl() != null
+                && options.getTtl().getSeconds() == 60));
+        verify(cache).put("abc123", urlMapping);
+    }
+}

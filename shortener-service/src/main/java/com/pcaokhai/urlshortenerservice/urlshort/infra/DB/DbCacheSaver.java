@@ -22,6 +22,8 @@ import org.springframework.data.cassandra.core.CassandraOperations;
 import org.springframework.data.cassandra.core.InsertOptions;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
+
 /** * DbCacheSaver is responsible for saving URL mappings to the database and updating the cache.
  * Every write claims its short_key with a lightweight transaction, so a key maps to exactly one URL.
  *
@@ -52,11 +54,29 @@ public class DbCacheSaver {
      * existing row's long_url survives.
      */
     public boolean saveUrlMappingIfAbsent(UrlMapping urlMapping) {
-        boolean applied = cassandra.insert(urlMapping, IF_NOT_EXISTS).wasApplied();
+        return saveUrlMappingIfAbsent(urlMapping, null);
+    }
+
+    /**
+     * Same as {@link #saveUrlMappingIfAbsent(UrlMapping)}, but when {@code ttlSeconds} is given,
+     * the row is written with a CQL {@code USING TTL} clause so ScyllaDB itself expires and
+     * physically removes it — no application-level cleanup job is involved.
+     */
+    public boolean saveUrlMappingIfAbsent(UrlMapping urlMapping, Long ttlSeconds) {
+        InsertOptions options = ttlSeconds == null ? IF_NOT_EXISTS : withTtl(ttlSeconds);
+        boolean applied = cassandra.insert(urlMapping, options).wasApplied();
         if (applied) {
             cache(urlMapping);
         }
         return applied;
+    }
+
+    private InsertOptions withTtl(long ttlSeconds) {
+        return InsertOptions.builder()
+                .withIfNotExists()
+                .serialConsistencyLevel(ConsistencyLevel.SERIAL)
+                .ttl(Duration.ofSeconds(ttlSeconds))
+                .build();
     }
 
     private void cache(UrlMapping urlMapping) {

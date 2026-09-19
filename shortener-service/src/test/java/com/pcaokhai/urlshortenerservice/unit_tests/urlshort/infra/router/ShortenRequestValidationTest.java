@@ -110,6 +110,29 @@ class ShortenRequestValidationTest {
         expectRejected(longUrl, "must not be blank");
     }
 
+    @ParameterizedTest
+    @ValueSource(longs = {0L, -1L, -1000L})
+    void rejectsNonPositiveExpiresInSeconds(long expiresInSeconds) throws Exception {
+        mockMvc.perform(post("/shorten")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"longUrl\":\"https://example.com\",\"expiresInSeconds\":" + expiresInSeconds + "}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("expiresInSeconds must be a positive number of seconds")));
+
+        verify(shortenerUseCase, never()).shorten(any());
+    }
+
+    @Test
+    void acceptsPositiveExpiresInSeconds() throws Exception {
+        when(shortenerUseCase.shorten(any())).thenReturn(new ShortenResponse("http://short.ly/abc123"));
+
+        mockMvc.perform(post("/shorten")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"longUrl\":\"https://example.com\",\"expiresInSeconds\":60}"))
+                .andExpect(status().isOk());
+    }
+
     @Test
     void rejectsMissingUrl() throws Exception {
         mockMvc.perform(post("/shorten")
