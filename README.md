@@ -398,9 +398,10 @@ When running locally, explore and test individual microservice APIs via Swagger 
 
 A Next.js + TypeScript + Tailwind + shadcn/ui frontend lives in `frontend/`.
 It wires the landing-page shorten form to the real `/shorten` API; the
-dashboard and analytics screens use mock data (no list/analytics/auth
-endpoint exists yet). See `frontend/README.md` for how to run it and what's
-real vs. mocked. Under Docker Compose and in the Helm chart it runs as its own
+dashboard and analytics screens use mock data — the backend now exposes
+`/links` list/update/delete endpoints, but the dashboard isn't wired to them
+yet, and there is still no analytics or auth endpoint. See `frontend/README.md`
+for how to run it and what's real vs. mocked. Under Docker Compose and in the Helm chart it runs as its own
 container behind the gateway (`https://hopr.localhost/`), which is what applies
 the per-client rate limit to its server-side `/api/shorten` route.
 

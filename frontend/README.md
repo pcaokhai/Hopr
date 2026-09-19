@@ -40,17 +40,22 @@ links point at `https://hopr.localhost`, not the Next.js dev server.
   slug, returns a real short link with copy-to-clipboard and a client-side
   QR code.
 
-**Mocked (backend has no list/analytics/auth endpoints yet):**
+**Mocked (not yet wired to the backend):**
 - `/dashboard` — link list, search, "Create link" modal. Backed by a Zustand
   store seeded with fake links (`src/lib/mock-data.ts`,
-  `src/lib/dashboard-store.ts`).
+  `src/lib/dashboard-store.ts`). `shortener-service` now exposes
+  `GET/PATCH/DELETE /links` (see the root `AGENTS.md`'s "Link management"
+  section) but this UI hasn't been switched over to it.
 - `/dashboard/[slug]` — clicks-over-time chart, top countries/devices/referrers.
-  All fabricated per-slug in `mockAnalyticsFor`.
+  All fabricated per-slug in `mockAnalyticsFor`; there is still no analytics
+  endpoint.
 - There's no real login — the dashboard is open, with a small note that it's
-  a demo view. Every mocked screen carries a "Demo data · not wired to
-  backend" badge (`src/components/mock-badge.tsx`).
+  a demo view. There is still no auth endpoint beyond the shared `X-API-Key`.
+  Every mocked screen carries a "Demo data · not wired to backend" badge
+  (`src/components/mock-badge.tsx`).
 
-Wire these up for real once the backend grows list/analytics/auth endpoints.
+Wire the dashboard list/detail views up to `/links` and add analytics/auth
+endpoints before removing the mock badge.
 
 ## Tests
 

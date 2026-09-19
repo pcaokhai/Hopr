@@ -9,7 +9,8 @@ When updating this file, preserve this bar for all agents and keep entries conci
 
 `frontend/` is a Next.js (App Router) + TypeScript + Tailwind + shadcn/ui + Zustand app. See `frontend/README.md`
 for how to run it and exactly which screens are wired to the real `/shorten` API vs. backed by mock data
-(the backend has no list/analytics/auth endpoints yet). shadcn/ui here uses the Base UI component library
+(the dashboard isn't wired to the `/links` endpoints below yet, and there is still no analytics or
+auth endpoint). shadcn/ui here uses the Base UI component library
 (not Radix) — components use the `render` prop for polymorphism, not `asChild`, and a `Button` wrapping a
 non-native element (e.g. a `next/link`) needs `nativeButton={false}` or Base UI logs an a11y warning.
 
