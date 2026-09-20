@@ -50,6 +50,19 @@ cache in `DbCacheSaver` and the read-through cache in resolver's `ResolverUseCas
 whenever `UrlMapping.getExpiresAt()` is set, so an expired link can't keep resolving from a stale
 cache entry after ScyllaDB has already dropped the row.
 
+`DbCacheSaver` no longer primes the cache itself: after a successful LWT insert it writes a
+durable outbox row (`OutboxEventWriter`, `db-migration`'s V5 `outbox_events` table), and
+`CachePrimePoller` (`@Scheduled`, `shortener-service`'s `urlshort/infra/outbox` package) is the
+only thing that reads pending events and primes Redis from them, so a crash between persist and
+cache-priming is a recoverable outbox row instead of a silently lost cache entry. Because Scylla
+refuses a batch that mixes a conditional (LWT) statement with another table, the outbox write is
+a second, unconditional insert issued right after the LWT applies — not the same atomic
+operation — see `OutboxEventWriter`'s javadoc for the actual guarantee. `outbox_events` partitions
+by `(day bucket, status)` so the poller's only query is a single-partition read of today's (and
+yesterday's) PENDING events; marking an event processed is a delete+insert into a different
+partition, which is fine for a non-conditional batch. This is also the intended plug-in point for
+a future Kafka-publishing consumer over the same table.
+
 ## Resilience
 
 Spring Boot 4 ships no AOP starter and nothing puts AspectJ on the classpath, so Resilience4j's

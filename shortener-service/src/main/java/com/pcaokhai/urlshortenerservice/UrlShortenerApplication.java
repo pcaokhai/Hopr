@@ -18,9 +18,11 @@ package com.pcaokhai.urlshortenerservice;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.data.cassandra.repository.config.EnableCassandraRepositories;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication(scanBasePackages = {"com.pcaokhai.common", "com.pcaokhai.urlshortenerservice"})
 @EnableCassandraRepositories(basePackages = "com.pcaokhai.common.url.repository")
+@EnableScheduling
 public class UrlShortenerApplication {
 
 	public static void main(String[] args) {

@@ -2,13 +2,12 @@ package com.pcaokhai.urlshortenerservice.unit_tests.urlshort.infra.DB;
 
 import com.pcaokhai.common.url.model.UrlMapping;
 import com.pcaokhai.urlshortenerservice.urlshort.infra.DB.DbCacheSaver;
+import com.pcaokhai.urlshortenerservice.urlshort.infra.outbox.OutboxEventWriter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
 import org.springframework.data.cassandra.core.CassandraOperations;
 import org.springframework.data.cassandra.core.EntityWriteResult;
 
@@ -24,46 +23,42 @@ public class DbCacheSaverTest {
     private CassandraOperations cassandra;
 
     @Mock
-    private CacheManager cacheManager;
-
-    @Mock
-    private Cache cache;
+    private OutboxEventWriter outboxEventWriter;
 
     private DbCacheSaver dbCacheSaver;
 
     @BeforeEach
     void setUp() {
-        dbCacheSaver = new DbCacheSaver(cassandra, cacheManager);
+        dbCacheSaver = new DbCacheSaver(cassandra, outboxEventWriter);
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    void saveIfAbsent_whenLwtApplies_cachesAndReportsSuccess() {
-        when(cacheManager.getCache("keys")).thenReturn(cache);
+    void saveIfAbsent_whenLwtApplies_enqueuesCachePrimeEventAndReportsSuccess() {
         UrlMapping urlMapping = new UrlMapping("abc123", "https://example.com", "abc123");
         EntityWriteResult<UrlMapping> result = mock(EntityWriteResult.class);
         when(result.wasApplied()).thenReturn(true);
         when(cassandra.insert(eq(urlMapping), any(InsertOptions.class))).thenReturn(result);
 
         assertTrue(dbCacheSaver.saveUrlMappingIfAbsent(urlMapping));
-        verify(cache).put("abc123", urlMapping);
+        verify(outboxEventWriter).enqueueCachePrimeEvent("abc123");
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    void saveIfAbsent_whenLwtDoesNotApply_reportsFailureAndLeavesCacheAlone() {
+    void saveIfAbsent_whenLwtDoesNotApply_reportsFailureAndLeavesOutboxAlone() {
         UrlMapping urlMapping = new UrlMapping("abc123", "https://example.com", "abc123");
         EntityWriteResult<UrlMapping> result = mock(EntityWriteResult.class);
         when(result.wasApplied()).thenReturn(false);
         when(cassandra.insert(eq(urlMapping), any(InsertOptions.class))).thenReturn(result);
 
         assertFalse(dbCacheSaver.saveUrlMappingIfAbsent(urlMapping));
-        verifyNoInteractions(cacheManager);
+        verifyNoInteractions(outboxEventWriter);
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    void saveIfAbsent_withTtl_insertsWithTtlOptionAndSkipsCache() {
+    void saveIfAbsent_withTtl_insertsWithTtlOptionAndSkipsOutbox() {
         UrlMapping urlMapping = new UrlMapping("abc123", "https://example.com", "abc123");
         EntityWriteResult<UrlMapping> result = mock(EntityWriteResult.class);
         when(result.wasApplied()).thenReturn(true);
@@ -73,6 +68,6 @@ public class DbCacheSaverTest {
 
         verify(cassandra).insert(eq(urlMapping), argThat((InsertOptions options) -> options.getTtl() != null
                 && options.getTtl().getSeconds() == 60));
-        verifyNoInteractions(cacheManager);
+        verifyNoInteractions(outboxEventWriter);
     }
 }
