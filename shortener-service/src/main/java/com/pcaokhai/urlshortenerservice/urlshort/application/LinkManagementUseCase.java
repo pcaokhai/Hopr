@@ -58,6 +58,14 @@ public class LinkManagementUseCase {
         this.cacheManager = cacheManager;
     }
 
+    /**
+     * One page of the caller's links.
+     *
+     * <p>{@code pageSize} bounds the rows Scylla <em>scans</em>, not the rows that match the
+     * owner filter, so a page can come back with an empty {@code links} array and a non-null
+     * {@code nextPageToken}. A caller must follow the token until it is null rather than stop at
+     * the first empty page.
+     */
     // ponytail: owner scoping via ALLOW FILTERING over the same full-table scan, because
     // owner_id is not part of any key -- Scylla reads every partition and discards the rows that
     // do not match, so this is correct but scales with the whole table, not with one owner's

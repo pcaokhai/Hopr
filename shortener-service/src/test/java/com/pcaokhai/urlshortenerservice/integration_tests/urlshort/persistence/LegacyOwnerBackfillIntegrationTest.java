@@ -7,10 +7,13 @@ import com.pcaokhai.urlshortenerservice.urlshort.infra.DB.LegacyOwnerBackfill;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -21,6 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * the {@code legacy} owner, leaves already-owned rows alone, and is safe to run twice.
  */
 @AutoConfigureMockMvc
+@SpringBootTest(properties = "shortener.legacy-owner-backfill.enabled=true")
 class LegacyOwnerBackfillIntegrationTest extends BaseIntegrationTest {
 
     private static final String LEGACY_KEY = "test-api-key-legacy";
@@ -60,6 +64,16 @@ class LegacyOwnerBackfillIntegrationTest extends BaseIntegrationTest {
 
         assertEquals("legacy", urlRepository.findById("pre-scoping").orElseThrow().getOwnerId());
         assertEquals("owner-a", urlRepository.findById("already-owned").orElseThrow().getOwnerId());
+    }
+
+    @Test
+    void doesNotResurrectARowThatDisappearedBetweenTheScanAndTheWrite() {
+        // A row read during the scan can have expired by the time its UPDATE lands: an
+        // unconditional upsert would recreate it with a null long_url, which the resolver caches
+        // and then 500s on. Driving the same write against a key that no longer exists is that
+        // race, deterministically.
+        assertFalse(backfill.stampOwner("vanished-mid-scan", 0));
+        assertTrue(urlRepository.findById("vanished-mid-scan").isEmpty());
     }
 
     @Test

@@ -90,7 +90,9 @@ its own previously-shortened links, gated by the same `X-API-Key` filter as `/v1
 key (see "API keys"): `urls.owner_id` is stamped on creation, and another owner's link answers
 `404`, never `403`, so one owner cannot probe which short keys another holds. `GET /v1/links`
 still scans the whole table, now with `ALLOW FILTERING` on `owner_id`, so it costs the table,
-not the owner; narrowing that needs a query-first secondary table keyed by `owner_id`.
+not the owner; narrowing that needs a query-first secondary table keyed by `owner_id`. That also
+means `pageSize` bounds rows scanned, not rows matched: an empty page with a non-null
+`nextPageToken` is expected, and a client must follow the token until it is null.
 Update/delete evict only
 `shortener-service`'s own Redis cache entry; the resolver runs an independently-namespaced Redis
 cache (see Observability/Resilience sections' Boot 4 traps — same pattern applies to cache
@@ -109,9 +111,12 @@ the `ApiKeyFilter.OWNER_ID_ATTRIBUTE` request attribute, which the controllers t
 `@RequestAttribute` and pass down; that attribute is the only source of owner identity, never the
 request body. Local development key: `hopr-local-dev-key` (owner `local-dev`); add a second
 `<digest>:<owner-id>` pair to demonstrate scoping by hand. Rows written before `owner_id` existed
-are stamped with the owner id `legacy` at startup by `LegacyOwnerBackfill` (a runner, not a Flyway
-migration — Scylla cannot UPDATE by a non-key column), which is idempotent and disableable via
-`shortener.legacy-owner-backfill.enabled`.
+are stamped with the owner id `legacy` by `LegacyOwnerBackfill` (a runner, not a Flyway
+migration — Scylla cannot UPDATE by a non-key column). It is off unless
+`shortener.legacy-owner-backfill.enabled=true` is passed deliberately, because the scan reads the
+whole table and must not gate every pod's readiness — run it once on one instance, not per
+replica; see README's authorization-scoping note. Idempotent, and `IF EXISTS` keeps it from
+resurrecting a row that expired mid-scan.
 
 ## API versioning
 

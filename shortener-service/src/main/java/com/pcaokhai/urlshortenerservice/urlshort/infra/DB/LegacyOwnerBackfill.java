@@ -39,12 +39,17 @@ import org.springframework.stereotype.Component;
  * is null" -- an UPDATE needs the full primary key and cannot filter on {@code owner_id} -- so
  * the rows have to be read first and written back one primary key at a time.
  *
- * <p>Safe to run repeatedly: a row that already has an owner is skipped, so the second run is a
- * read-only scan. Disable it with {@code shortener.legacy-owner-backfill.enabled=false} once no
- * null-owner rows remain, since the scan reads the whole table on every boot.
+ * <p>Safe to run repeatedly: a row that already has an owner is skipped, so a second run is a
+ * read-only scan. It is off by default and deliberately operator-triggered, because the scan
+ * reads the whole table and would otherwise gate every pod's readiness -- including the ones an
+ * HPA adds under load. Run it once, against a single instance, after deploying:
+ *
+ * <pre>{@code
+ * java -jar shortener-service.jar --shortener.legacy-owner-backfill.enabled=true
+ * }</pre>
  */
 @Component
-@ConditionalOnProperty(name = "shortener.legacy-owner-backfill.enabled", matchIfMissing = true)
+@ConditionalOnProperty(name = "shortener.legacy-owner-backfill.enabled", havingValue = "true")
 public class LegacyOwnerBackfill implements ApplicationRunner {
 
     public static final String LEGACY_OWNER_ID = "legacy";
@@ -61,11 +66,6 @@ public class LegacyOwnerBackfill implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         log.info("Backfilling owner_id={} onto pre-scoping urls rows", LEGACY_OWNER_ID);
-        // TTL(long_url) carries the row's remaining lifetime: a plain UPDATE writes owner_id
-        // without a TTL, which would outlive the rest of an expiring row and leave a zombie
-        // behind. `USING TTL 0` on a row that never expires means exactly "no TTL".
-        PreparedStatement update = session.prepare(
-                "UPDATE urls USING TTL ? SET owner_id = ? WHERE short_key = ?");
         int stamped = 0;
         Iterable<Row> rows = session.execute(
                 SimpleStatement.newInstance("SELECT short_key, owner_id, TTL(long_url) AS ttl FROM urls")
@@ -75,9 +75,21 @@ public class LegacyOwnerBackfill implements ApplicationRunner {
                 continue;
             }
             Integer ttl = row.isNull("ttl") ? null : row.getInt("ttl");
-            session.execute(update.bind(ttl == null ? 0 : ttl, LEGACY_OWNER_ID, row.getString("short_key")));
-            stamped++;
+            if (stampOwner(row.getString("short_key"), ttl == null ? 0 : ttl)) {
+                stamped++;
+            }
         }
         log.info("Legacy owner backfill complete: {} row(s) assigned to owner {}", stamped, LEGACY_OWNER_ID);
+    }
+
+    // `IF EXISTS` because a plain UPDATE is an upsert: a row whose TTL expired between the scan
+    // and this write would be recreated as a phantom carrying only short_key and owner_id, which
+    // the resolver would then cache for 12h and NPE on. TTL(long_url) carries the row's
+    // remaining lifetime so the stamped column expires with the rest of it; `USING TTL 0` on a
+    // row that never expires means exactly "no TTL".
+    public boolean stampOwner(String shortKey, int ttlSeconds) {
+        PreparedStatement update = session.prepare(
+                "UPDATE urls USING TTL ? SET owner_id = ? WHERE short_key = ? IF EXISTS");
+        return session.execute(update.bind(ttlSeconds, LEGACY_OWNER_ID, shortKey)).wasApplied();
     }
 }

@@ -277,13 +277,24 @@ below passes `-k` and a browser will show a warning you have to click through �
 >
 > 🧍 **Authorization scoping**: the owner id each key maps to is stamped onto every link that key
 > creates, and the `/v1/links` management endpoints only ever see that owner's links. Another
-> owner's link answers `404`, not `403` — a `403` would confirm the short key exists. Add a second
+> owner's link answers `404`, not `403` — a `403` would confirm the short key exists. `GET
+> /v1/links` pages over a filtered scan, so an empty `links` array with a non-null
+> `nextPageToken` is normal — follow the token until it is null. Add a second
 > `<digest>:<owner-id>` pair to `SHORTENER_API_KEY_OWNERS` to watch the scoping locally.
 >
-> 🕰️ **Links created before scoping existed** have no owner, so they would be unmanageable. On
-> startup `shortener-service` stamps every such row with the owner id `legacy`
-> (`LegacyOwnerBackfill`); configure a `<digest>:legacy` key to manage them. The scan is safe to
-> repeat and can be turned off with `shortener.legacy-owner-backfill.enabled=false` once done.
+> 🕰️ **Links created before scoping existed** have no owner, so they would be unmanageable.
+> `LegacyOwnerBackfill` stamps every such row with the owner id `legacy`; configure a
+> `<digest>:legacy` key to manage them. It is **off by default and operator-triggered**: run it
+> once, on a single instance, after deploying — not per replica, since the scan reads the whole
+> `urls` table and would otherwise gate every pod's readiness:
+>
+> ```bash
+> java -jar shortener-service.jar --shortener.legacy-owner-backfill.enabled=true
+> # in-cluster: kubectl run hopr-backfill --rm -it --image=<shortener image> -- \
+> #   --shortener.legacy-owner-backfill.enabled=true
+> ```
+>
+> It is idempotent, so re-running it is harmless; rows that expired mid-scan are not resurrected.
 >
 > 🔢 **Versioning**: the write and management API lives under `/v1/`, so a future breaking change
 > can ship as `/v2/` beside it. Short links themselves (`GET /{shortKey}`) stay unversioned: they
