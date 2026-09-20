@@ -16,6 +16,7 @@
 package com.pcaokhai.urlshortenerservice.unit_tests.urlshort.infra.router;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pcaokhai.urlshortenerservice.security.ApiKeyFilter;
 import com.pcaokhai.common.url.model.dto.ShortenRequest;
 import com.pcaokhai.common.url.model.dto.ShortenResponse;
 import com.pcaokhai.urlshortenerservice.urlshort.application.ShortenerUseCase;
@@ -54,13 +55,15 @@ class ShortenRequestValidationTest {
         shortenerUseCase = mock(ShortenerUseCase.class);
         mockMvc = MockMvcBuilders.standaloneSetup(new ShortenerController(shortenerUseCase))
                 .setControllerAdvice(new UrlShortenerExceptionHandler())
+                // Stands in for ApiKeyFilter, which is what sets this attribute in production.
+                .defaultRequest(post("/").requestAttr(ApiKeyFilter.OWNER_ID_ATTRIBUTE, "owner-a"))
                 .build();
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"http://example.com/a?b=c", "https://example.com", "HTTPS://example.com", "Http://example.com/a"})
     void acceptsAbsoluteHttpUrls(String longUrl) throws Exception {
-        when(shortenerUseCase.shorten(any())).thenReturn(new ShortenResponse("http://short.ly/abc123"));
+        when(shortenerUseCase.shorten(any(), any())).thenReturn(new ShortenResponse("http://short.ly/abc123"));
 
         perform(longUrl)
                 .andExpect(status().isOk())
@@ -99,7 +102,7 @@ class ShortenRequestValidationTest {
     void acceptsUrlExactlyAtTheLengthCap() throws Exception {
         String prefix = "https://example.com/";
         String longUrl = prefix + "a".repeat(ShortenRequest.MAX_LONG_URL_LENGTH - prefix.length());
-        when(shortenerUseCase.shorten(any())).thenReturn(new ShortenResponse("http://short.ly/abc123"));
+        when(shortenerUseCase.shorten(any(), any())).thenReturn(new ShortenResponse("http://short.ly/abc123"));
 
         perform(longUrl).andExpect(status().isOk());
     }
@@ -113,21 +116,21 @@ class ShortenRequestValidationTest {
     @ParameterizedTest
     @ValueSource(longs = {0L, -1L, -1000L})
     void rejectsNonPositiveExpiresInSeconds(long expiresInSeconds) throws Exception {
-        mockMvc.perform(post("/shorten")
+        mockMvc.perform(post("/v1/shorten")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"longUrl\":\"https://example.com\",\"expiresInSeconds\":" + expiresInSeconds + "}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(
                         org.hamcrest.Matchers.containsString("expiresInSeconds must be a positive number of seconds")));
 
-        verify(shortenerUseCase, never()).shorten(any());
+        verify(shortenerUseCase, never()).shorten(any(), any());
     }
 
     @Test
     void acceptsPositiveExpiresInSeconds() throws Exception {
-        when(shortenerUseCase.shorten(any())).thenReturn(new ShortenResponse("http://short.ly/abc123"));
+        when(shortenerUseCase.shorten(any(), any())).thenReturn(new ShortenResponse("http://short.ly/abc123"));
 
-        mockMvc.perform(post("/shorten")
+        mockMvc.perform(post("/v1/shorten")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"longUrl\":\"https://example.com\",\"expiresInSeconds\":60}"))
                 .andExpect(status().isOk());
@@ -135,12 +138,12 @@ class ShortenRequestValidationTest {
 
     @Test
     void rejectsMissingUrl() throws Exception {
-        mockMvc.perform(post("/shorten")
+        mockMvc.perform(post("/v1/shorten")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"alias\":\"abc123\"}"))
                 .andExpect(status().isBadRequest());
 
-        verify(shortenerUseCase, never()).shorten(any());
+        verify(shortenerUseCase, never()).shorten(any(), any());
     }
 
     private void expectRejected(String longUrl, String expectedMessageFragment) throws Exception {
@@ -150,11 +153,11 @@ class ShortenRequestValidationTest {
                 .andExpect(jsonPath("$.message").value(
                         org.hamcrest.Matchers.containsString(expectedMessageFragment)));
 
-        verify(shortenerUseCase, never()).shorten(any());
+        verify(shortenerUseCase, never()).shorten(any(), any());
     }
 
     private org.springframework.test.web.servlet.ResultActions perform(String longUrl) throws Exception {
-        return mockMvc.perform(post("/shorten")
+        return mockMvc.perform(post("/v1/shorten")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(MAPPER.writeValueAsString(new ShortenRequest(longUrl, "abc123"))));
     }

@@ -55,7 +55,7 @@ class UrlExpiryIntegrationTest extends BaseIntegrationTest {
         ShortenRequest request = new ShortenRequest(
                 "https://example.com/expires-soon", "ttlkey1", (long) TTL_SECONDS);
 
-        mockMvc.perform(post("/shorten").header("X-API-Key", "test-api-key")
+        mockMvc.perform(post("/v1/shorten").header("X-API-Key", "test-api-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk());
@@ -82,7 +82,7 @@ class UrlExpiryIntegrationTest extends BaseIntegrationTest {
     void linkWithoutTtlRemainsResolvable() throws Exception {
         ShortenRequest request = new ShortenRequest("https://example.com/never-expires", "nottlkey1");
 
-        mockMvc.perform(post("/shorten").header("X-API-Key", "test-api-key")
+        mockMvc.perform(post("/v1/shorten").header("X-API-Key", "test-api-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk());

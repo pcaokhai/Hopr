@@ -56,7 +56,7 @@ export async function POST(request: Request): Promise<Response> {
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${UPSTREAM_BASE_URL}/shorten`, {
+    upstream = await fetch(`${UPSTREAM_BASE_URL}/v1/shorten`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
       body,

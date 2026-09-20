@@ -1,6 +1,7 @@
 package com.pcaokhai.urlshortenerservice.unit_tests.urlshort.infra.router;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pcaokhai.urlshortenerservice.security.ApiKeyFilter;
 import com.pcaokhai.common.url.model.dto.LinkListResponse;
 import com.pcaokhai.common.url.model.dto.LinkResponse;
 import com.pcaokhai.urlshortenerservice.urlshort.application.LinkManagementUseCase;
@@ -29,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Covers GET/PATCH/DELETE /links routing, response shape, not-found mapping, and PATCH input
+ * Covers GET/PATCH/DELETE /v1/links routing, response shape, not-found mapping, and PATCH input
  * validation. Auth (X-API-Key) is covered separately by {@code LinkManagementApiKeyIntegrationTest}.
  */
 class LinkManagementControllerTest {
@@ -46,14 +47,18 @@ class LinkManagementControllerTest {
         useCase = mock(LinkManagementUseCase.class);
         mockMvc = MockMvcBuilders.standaloneSetup(new LinkManagementController(useCase))
                 .setControllerAdvice(new UrlShortenerExceptionHandler())
+                // Stands in for ApiKeyFilter, which is what sets this attribute in production
+                // (it is not in this standalone setup); owner scoping itself is covered by
+                // LinkOwnerScopingIntegrationTest.
+                .defaultRequest(get("/").requestAttr(ApiKeyFilter.OWNER_ID_ATTRIBUTE, "owner-a"))
                 .build();
     }
 
     @Test
     void listReturnsPageOfLinks() throws Exception {
-        when(useCase.list(50, null)).thenReturn(new LinkListResponse(List.of(SAMPLE), null));
+        when(useCase.list(50, null, "owner-a")).thenReturn(new LinkListResponse(List.of(SAMPLE), null));
 
-        mockMvc.perform(get("/links"))
+        mockMvc.perform(get("/v1/links"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.links[0].shortKey").value("abc123"))
                 .andExpect(jsonPath("$.nextPageToken").doesNotExist());
@@ -61,19 +66,19 @@ class LinkManagementControllerTest {
 
     @Test
     void listForwardsPageSizeAndToken() throws Exception {
-        when(useCase.list(eq(10), eq("token"))).thenReturn(new LinkListResponse(List.of(), null));
+        when(useCase.list(eq(10), eq("token"), eq("owner-a"))).thenReturn(new LinkListResponse(List.of(), null));
 
-        mockMvc.perform(get("/links").param("pageSize", "10").param("pageToken", "token"))
+        mockMvc.perform(get("/v1/links").param("pageSize", "10").param("pageToken", "token"))
                 .andExpect(status().isOk());
 
-        verify(useCase).list(10, "token");
+        verify(useCase).list(10, "token", "owner-a");
     }
 
     @Test
     void getReturnsLink() throws Exception {
-        when(useCase.get("abc123")).thenReturn(SAMPLE);
+        when(useCase.get("abc123", "owner-a")).thenReturn(SAMPLE);
 
-        mockMvc.perform(get("/links/abc123"))
+        mockMvc.perform(get("/v1/links/abc123"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.longUrl").value("https://example.com"))
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
@@ -81,9 +86,9 @@ class LinkManagementControllerTest {
 
     @Test
     void getReturnsNotFoundForUnknownShortKey() throws Exception {
-        when(useCase.get("missing")).thenThrow(new LinkNotFoundException("missing"));
+        when(useCase.get("missing", "owner-a")).thenThrow(new LinkNotFoundException("missing"));
 
-        mockMvc.perform(get("/links/missing"))
+        mockMvc.perform(get("/v1/links/missing"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.message").value(containsString("missing")));
@@ -93,9 +98,9 @@ class LinkManagementControllerTest {
     void updateAppliesLongUrlChange() throws Exception {
         LinkResponse updated = new LinkResponse("abc123", "https://updated.example.com", null, "ACTIVE",
                 Instant.parse("2026-01-01T00:00:00Z"), null);
-        when(useCase.update(eq("abc123"), any())).thenReturn(updated);
+        when(useCase.update(eq("abc123"), any(), eq("owner-a"))).thenReturn(updated);
 
-        mockMvc.perform(patch("/links/abc123")
+        mockMvc.perform(patch("/v1/links/abc123")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"longUrl\":\"https://updated.example.com\"}"))
                 .andExpect(status().isOk())
@@ -104,9 +109,9 @@ class LinkManagementControllerTest {
 
     @Test
     void updateReturnsNotFoundForUnknownShortKey() throws Exception {
-        when(useCase.update(eq("missing"), any())).thenThrow(new LinkNotFoundException("missing"));
+        when(useCase.update(eq("missing"), any(), eq("owner-a"))).thenThrow(new LinkNotFoundException("missing"));
 
-        mockMvc.perform(patch("/links/missing")
+        mockMvc.perform(patch("/v1/links/missing")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"longUrl\":\"https://updated.example.com\"}"))
                 .andExpect(status().isNotFound());
@@ -114,18 +119,18 @@ class LinkManagementControllerTest {
 
     @Test
     void updateRejectsInvalidLongUrl() throws Exception {
-        mockMvc.perform(patch("/links/abc123")
+        mockMvc.perform(patch("/v1/links/abc123")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"longUrl\":\"javascript:alert(1)\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("absolute http or https URL")));
 
-        verify(useCase, org.mockito.Mockito.never()).update(any(), any());
+        verify(useCase, org.mockito.Mockito.never()).update(any(), any(), any());
     }
 
     @Test
     void updateRejectsNonPositiveExpiresInSeconds() throws Exception {
-        mockMvc.perform(patch("/links/abc123")
+        mockMvc.perform(patch("/v1/links/abc123")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"expiresInSeconds\":0}"))
                 .andExpect(status().isBadRequest())
@@ -134,15 +139,15 @@ class LinkManagementControllerTest {
 
     @Test
     void deleteReturnsNoContent() throws Exception {
-        mockMvc.perform(delete("/links/abc123")).andExpect(status().isNoContent());
+        mockMvc.perform(delete("/v1/links/abc123")).andExpect(status().isNoContent());
 
-        verify(useCase).delete("abc123");
+        verify(useCase).delete("abc123", "owner-a");
     }
 
     @Test
     void deleteReturnsNotFoundForUnknownShortKey() throws Exception {
-        org.mockito.Mockito.doThrow(new LinkNotFoundException("missing")).when(useCase).delete("missing");
+        org.mockito.Mockito.doThrow(new LinkNotFoundException("missing")).when(useCase).delete("missing", "owner-a");
 
-        mockMvc.perform(delete("/links/missing")).andExpect(status().isNotFound());
+        mockMvc.perform(delete("/v1/links/missing")).andExpect(status().isNotFound());
     }
 }

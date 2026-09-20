@@ -10,7 +10,7 @@ All services run inside a dedicated Docker bridge network (`hopr_default`):
 
 | Service Name | Container Name | Port (Host : Container) | Description |
 | :--- | :--- | :--- | :--- |
-| **`api-gateway`** | `hopr-api-gateway` | `80:80`, `443:443` | Nginx reverse proxy terminating TLS (`80` only `301`s to HTTPS) and routing `/shorten` to `shortener-service` and `/{alias}` to `resolver-service`. Rate limited (5 req/s, burst 10). |
+| **`api-gateway`** | `hopr-api-gateway` | `80:80`, `443:443` | Nginx reverse proxy terminating TLS (`80` only `301`s to HTTPS) and routing `/v1/shorten` to `shortener-service` and `/{alias}` to `resolver-service`. Rate limited (5 req/s, burst 10). |
 | **`config-server`** | `hopr-config-server` | - | Spring Cloud Config Server serving centralized configuration to the microservices (internal only, no host port published). |
 | **`keygen-service`** | `hopr-keygen-service` | `8081:8081` | Generates unique random keys for shortened URLs. |
 | **`shortener-service`** | `hopr-shortener-service` | `8080:8080` | Handles URL shortening requests, persists to ScyllaDB, caches in Redis, interacts with KeyGen. |
@@ -174,18 +174,19 @@ It should show `Up` / `running` before the other microservices report healthy.
 
 ### Test 2: Shorten a URL (Random Key)
 
-> 🔑 **API key required:** `POST /shorten` needs an `X-API-Key` header, or it answers `401
-> Unauthorized`. `.env.example` ships `SHORTENER_API_KEY_HASHES` set to the SHA-256 digest of the
-> local development key `hopr-local-dev-key`, so a fresh `cp .env.example .env` works with the
-> commands below. Only digests are configured — replace the digest (and the key you hand clients)
-> for anything beyond local use. `GET /{shortKey}` redirects remain public and unauthenticated.
+> 🔑 **API key required:** `POST /v1/shorten` needs an `X-API-Key` header, or it answers `401
+> Unauthorized`. `.env.example` ships `SHORTENER_API_KEY_OWNERS` set to the SHA-256 digests of the
+> local development key `hopr-local-dev-key` (owner `local-dev`), so a fresh `cp .env.example .env`
+> works with the commands below. Each key maps to an owner, and `/v1/links` only ever shows that
+> owner's links — add a second `<digest>:<owner-id>` pair to see the scoping. Only digests are configured — replace them (and the keys you hand clients) for
+> anything beyond local use. `GET /{shortKey}` redirects remain public and unauthenticated.
 
 > ⚠️ **CRITICAL REQUIREMENT:** The request payload must use the JSON key `longUrl` (do **not** use `url`).
 
 Execute the cURL command:
 
 ```bash
-curl -vk -X POST https://hopr.localhost/shorten \
+curl -vk -X POST https://hopr.localhost/v1/shorten \
   -H "X-API-Key: hopr-local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{"longUrl": "https://example.com"}'
@@ -206,7 +207,7 @@ curl -vk -X POST https://hopr.localhost/shorten \
 Provide an optional `alias` attribute to customize the shortened link:
 
 ```bash
-curl -vk -X POST https://hopr.localhost/shorten \
+curl -vk -X POST https://hopr.localhost/v1/shorten \
   -H "X-API-Key: hopr-local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{"longUrl": "https://github.com/pcaokhai/Hopr", "alias": "my-hopr-repo"}'
@@ -297,7 +298,7 @@ docker exec hopr-redis-node-1 redis-cli -c -p 6379 keys "*"
 The API Gateway enforces a rate limit of 5 requests/sec with a burst allowance of 10 requests. Test this by firing 15 requests in rapid succession:
 
 ```bash
-for i in {1..15}; do curl -sk -o /dev/null -w "%{http_code}\n" https://hopr.localhost/shorten -H "Content-Type: application/json" -d '{"longUrl": "https://example.com"}'; done
+for i in {1..15}; do curl -sk -o /dev/null -w "%{http_code}\n" https://hopr.localhost/v1/shorten -H "Content-Type: application/json" -d '{"longUrl": "https://example.com"}'; done
 ```
 
 **Expected Result:** Initial requests return `200`, followed by `429 Too Many Requests` once the burst threshold is exceeded.

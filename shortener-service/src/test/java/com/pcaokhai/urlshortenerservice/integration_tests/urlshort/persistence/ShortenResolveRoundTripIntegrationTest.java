@@ -60,7 +60,7 @@ class ShortenResolveRoundTripIntegrationTest extends BaseIntegrationTest {
         // An explicit alias keeps keygen-service out of the round trip; the alias is the short key.
         ShortenRequest request = new ShortenRequest("https://example.com/a/very/long/path", "roundtrip1");
 
-        String body = mockMvc.perform(post("/shorten").header("X-API-Key", "test-api-key")
+        String body = mockMvc.perform(post("/v1/shorten").header("X-API-Key", "test-api-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())

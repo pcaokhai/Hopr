@@ -21,8 +21,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Wires {@link ApiKeyFilter} onto {@code /shorten} and the {@code /links} management endpoints,
- * and nothing else.
+ * Wires {@link ApiKeyFilter} onto {@code /v1/shorten} and the {@code /v1/links} management
+ * endpoints, and nothing else.
  *
  * <p>A {@link FilterRegistrationBean} with explicit URL patterns -- rather than a bare
  * {@code @Component} filter, which the servlet container would map to {@code /*} -- is what keeps
@@ -35,8 +35,8 @@ public class ApiKeySecurityConfig {
     public FilterRegistrationBean<ApiKeyFilter> apiKeyFilterRegistration(
             ApiKeyProperties properties, ObjectMapper objectMapper) {
         FilterRegistrationBean<ApiKeyFilter> registration = new FilterRegistrationBean<>(
-                new ApiKeyFilter(properties.getHashes(), objectMapper));
-        registration.addUrlPatterns("/shorten", "/links", "/links/*");
+                new ApiKeyFilter(properties.ownerByHash(), objectMapper));
+        registration.addUrlPatterns("/v1/shorten", "/v1/links", "/v1/links/*");
         return registration;
     }
 }

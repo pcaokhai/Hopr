@@ -18,6 +18,7 @@ package com.pcaokhai.urlshortenerservice.urlshort.infra.router;
 import com.pcaokhai.common.url.model.dto.LinkListResponse;
 import com.pcaokhai.common.url.model.dto.LinkResponse;
 import com.pcaokhai.common.url.model.dto.UpdateLinkRequest;
+import com.pcaokhai.urlshortenerservice.security.ApiKeyFilter;
 import com.pcaokhai.urlshortenerservice.urlshort.application.LinkManagementUseCase;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -25,19 +26,21 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Management endpoints for links already created via {@code POST /shorten}: list, read, update
+ * Management endpoints for links already created via {@code POST /v1/shorten}: list, read, update
  * (long URL and/or expiration), and delete. Gated by the same {@code X-API-Key} filter as
- * {@code /shorten} (see {@link com.pcaokhai.urlshortenerservice.security.ApiKeySecurityConfig}) --
- * scoped identically, i.e. not scoped at all: any caller holding the key can manage any link.
+ * {@code /v1/shorten} (see {@link com.pcaokhai.urlshortenerservice.security.ApiKeySecurityConfig}),
+ * and scoped to the owner that filter resolved from the key: a caller only ever reaches links its
+ * own key created, and another owner's link is a 404.
  */
 @RestController
-@RequestMapping("/links")
+@RequestMapping("/v1/links")
 public class LinkManagementController {
 
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -51,23 +54,28 @@ public class LinkManagementController {
     @GetMapping
     public ResponseEntity<LinkListResponse> list(
             @RequestParam(defaultValue = "" + DEFAULT_PAGE_SIZE) int pageSize,
-            @RequestParam(required = false) String pageToken) {
-        return ResponseEntity.ok(linkManagementUseCase.list(pageSize, pageToken));
+            @RequestParam(required = false) String pageToken,
+            @RequestAttribute(ApiKeyFilter.OWNER_ID_ATTRIBUTE) String ownerId) {
+        return ResponseEntity.ok(linkManagementUseCase.list(pageSize, pageToken, ownerId));
     }
 
     @GetMapping("/{shortKey}")
-    public ResponseEntity<LinkResponse> get(@PathVariable String shortKey) {
-        return ResponseEntity.ok(linkManagementUseCase.get(shortKey));
+    public ResponseEntity<LinkResponse> get(@PathVariable String shortKey,
+            @RequestAttribute(ApiKeyFilter.OWNER_ID_ATTRIBUTE) String ownerId) {
+        return ResponseEntity.ok(linkManagementUseCase.get(shortKey, ownerId));
     }
 
     @PatchMapping("/{shortKey}")
-    public ResponseEntity<LinkResponse> update(@PathVariable String shortKey, @Valid @RequestBody UpdateLinkRequest request) {
-        return ResponseEntity.ok(linkManagementUseCase.update(shortKey, request));
+    public ResponseEntity<LinkResponse> update(@PathVariable String shortKey,
+            @Valid @RequestBody UpdateLinkRequest request,
+            @RequestAttribute(ApiKeyFilter.OWNER_ID_ATTRIBUTE) String ownerId) {
+        return ResponseEntity.ok(linkManagementUseCase.update(shortKey, request, ownerId));
     }
 
     @DeleteMapping("/{shortKey}")
-    public ResponseEntity<Void> delete(@PathVariable String shortKey) {
-        linkManagementUseCase.delete(shortKey);
+    public ResponseEntity<Void> delete(@PathVariable String shortKey,
+            @RequestAttribute(ApiKeyFilter.OWNER_ID_ATTRIBUTE) String ownerId) {
+        linkManagementUseCase.delete(shortKey, ownerId);
         return ResponseEntity.noContent().build();
     }
 }

@@ -16,7 +16,7 @@ trap 'rm -rf "$TMPDIR"' EXIT
 # evaluates even when --show-only narrows the output, so every render needs dummy values.
 echo dummy-cert > "$TMPDIR/tls.crt"
 echo dummy-key > "$TMPDIR/tls.key"
-COMMON_SET=(--set shortenApiKey=x --set config.shortenerApiKeyHashes=abc
+COMMON_SET=(--set shortenApiKey=x --set config.shortenerApiKeyOwners=abc:owner-a
   --set-file "tls.crt=$TMPDIR/tls.crt" --set-file "tls.key=$TMPDIR/tls.key")
 
 render() {

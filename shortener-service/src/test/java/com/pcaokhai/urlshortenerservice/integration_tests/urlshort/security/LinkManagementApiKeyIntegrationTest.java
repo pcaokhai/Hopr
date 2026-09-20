@@ -36,32 +36,32 @@ class LinkManagementApiKeyIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void listWithoutKeyIsRejected() throws Exception {
-        mockMvc.perform(get("/links"))
+        mockMvc.perform(get("/v1/links"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value(401));
-        verify(linkManagementUseCase, never()).list(anyInt(), any());
+        verify(linkManagementUseCase, never()).list(anyInt(), any(), any());
     }
 
     @Test
     void getWithoutKeyIsRejected() throws Exception {
-        mockMvc.perform(get("/links/abc123"))
+        mockMvc.perform(get("/v1/links/abc123"))
                 .andExpect(status().isUnauthorized());
-        verify(linkManagementUseCase, never()).get(any());
+        verify(linkManagementUseCase, never()).get(any(), any());
     }
 
     @Test
     void updateWithoutKeyIsRejected() throws Exception {
-        mockMvc.perform(patch("/links/abc123")
+        mockMvc.perform(patch("/v1/links/abc123")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"longUrl\":\"https://example.com\"}"))
                 .andExpect(status().isUnauthorized());
-        verify(linkManagementUseCase, never()).update(any(), any());
+        verify(linkManagementUseCase, never()).update(any(), any(), any());
     }
 
     @Test
     void deleteWithoutKeyIsRejected() throws Exception {
-        mockMvc.perform(delete("/links/abc123"))
+        mockMvc.perform(delete("/v1/links/abc123"))
                 .andExpect(status().isUnauthorized());
-        verify(linkManagementUseCase, never()).delete(any());
+        verify(linkManagementUseCase, never()).delete(any(), any());
     }
 }

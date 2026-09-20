@@ -37,8 +37,8 @@ public class ShortenerControllerIntegrationTest extends BaseIntegrationTest {
     public void shouldReturnShortenedUrlWhenAliasIsProvided() throws Exception {
         ShortenRequest request = new ShortenRequest("https://example.com", "abc123");
         ShortenResponse response = new ShortenResponse("https://short.url/abc123");
-        when(shortenerController.shortenUrl(request)).thenReturn(ResponseEntity.ok(response));
-        mockMvc.perform(post("/shorten").header("X-API-Key", "test-api-key")
+        when(shortenerController.shortenUrl(org.mockito.ArgumentMatchers.eq(request), org.mockito.ArgumentMatchers.any())).thenReturn(ResponseEntity.ok(response));
+        mockMvc.perform(post("/v1/shorten").header("X-API-Key", "test-api-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -49,8 +49,8 @@ public class ShortenerControllerIntegrationTest extends BaseIntegrationTest {
     void shouldReturnShortenedUrlWhenAliasIsNotProvided() throws Exception{
         ShortenRequest request = new ShortenRequest("https://example.com", null);
         ShortenResponse response = new ShortenResponse("https://short.url/xyz789");
-        when(shortenerController.shortenUrl(request)).thenReturn(ResponseEntity.ok(response));
-        mockMvc.perform(post("/shorten").header("X-API-Key", "test-api-key")
+        when(shortenerController.shortenUrl(org.mockito.ArgumentMatchers.eq(request), org.mockito.ArgumentMatchers.any())).thenReturn(ResponseEntity.ok(response));
+        mockMvc.perform(post("/v1/shorten").header("X-API-Key", "test-api-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())

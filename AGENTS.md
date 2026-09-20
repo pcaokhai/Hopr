@@ -8,8 +8,8 @@ When updating this file, preserve this bar for all agents and keep entries conci
 ## Frontend
 
 `frontend/` is a Next.js (App Router) + TypeScript + Tailwind + shadcn/ui + Zustand app. See `frontend/README.md`
-for how to run it and exactly which screens are wired to the real `/shorten` API vs. backed by mock data
-(the dashboard isn't wired to the `/links` endpoints below yet, and there is still no analytics or
+for how to run it and exactly which screens are wired to the real `/v1/shorten` API vs. backed by mock data
+(the dashboard isn't wired to the `/v1/links` endpoints below yet, and there is still no analytics or
 auth endpoint). shadcn/ui here uses the Base UI component library
 (not Radix) — components use the `render` prop for polymorphism, not `asChild`, and a `Button` wrapping a
 non-native element (e.g. a `next/link`) needs `nativeButton={false}` or Base UI logs an a11y warning.
@@ -20,7 +20,7 @@ reachable only through the gateway (`api-gateway/nginx.conf` proxies `/api/`, `/
 and `/dashboard` to the `frontend` container), which is what rate-limits it per client address —
 a Next.js route handler is given no connection address, so it cannot do that itself.
 `api-gateway/rate-limit-test.sh` drives the real config in docker to prove both the limit and
-that `/shorten` and the redirect regex still reach their own services.
+that `/v1/shorten` and the redirect regex still reach their own services.
 
 ## TLS
 
@@ -45,6 +45,12 @@ a 409 for a user-chosen alias and a bounded retry under a freshly generated key 
 `UrlRepository.save` is a plain CQL INSERT, i.e. an upsert that silently overwrites an existing
 row, and is not used to write. A shorten request may set `expiresInSeconds`; `DbCacheSaver` then
 writes the row `USING TTL` so ScyllaDB itself expires and removes it — no app-level cleanup job.
+`UrlMapping` is cached JDK-serialized (both `CacheConfig`s use
+`RedisCacheConfiguration.defaultCacheConfig()`), so any change to its fields changes its implicit
+`serialVersionUID` and makes entries written by the previous build undeserializable — a 500 on the
+public redirect path until the 12h TTL lapses. Bump the `.vN` segment of the cache-name prefix in
+**both** `CacheConfig` beans whenever a cached type's shape changes; an explicit `serialVersionUID`
+does not help, since the already-written bytes carry the old one.
 Because a TTL'd row can vanish out from under a fixed-TTL cache entry, both the write-through
 cache in `DbCacheSaver` and the read-through cache in resolver's `ResolverUseCase` skip caching
 whenever `UrlMapping.getExpiresAt()` is set, so an expired link can't keep resolving from a stale
@@ -83,28 +89,53 @@ sampling and endpoint exposure live in `config-server/src/main/resources/config-
 
 ## Link management
 
-`shortener-service`'s `GET/GET {shortKey}/PATCH {shortKey}/DELETE {shortKey}` under `/links`
+`shortener-service`'s `GET/GET {shortKey}/PATCH {shortKey}/DELETE {shortKey}` under `/v1/links`
 (`LinkManagementController`/`LinkManagementUseCase`) let a caller list, read, update, or delete
-any previously-shortened link, gated by the same `X-API-Key` filter as `/shorten` — see
-`ApiKeySecurityConfig`. There is no per-owner scoping: the `urls` table's `owner_id` column
-exists but nothing populates or enforces it yet (deferred to a future multi-tenancy phase), so
-any caller holding the key can manage any link. `GET /links` is an unscoped full-table scan
-over Scylla's native paging state (`CassandraPageRequest`, base64-encoded as `pageToken`) —
-honest "every link in the system", not "my links"; a real per-owner listing needs a
-query-first secondary table keyed by `owner_id` before it can narrow. Update/delete evict only
+its own previously-shortened links, gated by the same `X-API-Key` filter as `/v1/shorten` — see
+`ApiKeySecurityConfig`. Every endpoint is scoped to the owner id that filter resolved from the
+key (see "API keys"): `urls.owner_id` is stamped on creation, and another owner's link answers
+`404`, never `403`, so one owner cannot probe which short keys another holds. `GET /v1/links`
+still scans the whole table, now with `ALLOW FILTERING` on `owner_id`, so it costs the table,
+not the owner; narrowing that needs a query-first secondary table keyed by `owner_id`. That also
+means `pageSize` bounds rows scanned, not rows matched: an empty page with a non-null
+`nextPageToken` is expected, and a client must follow the token until it is null.
+Update/delete evict only
 `shortener-service`'s own Redis cache entry; the resolver runs an independently-namespaced Redis
 cache (see Observability/Resilience sections' Boot 4 traps — same pattern applies to cache
 naming) and can keep serving a stale mapping for up to its 12h TTL after an update/delete.
 
 ## API keys
 
-`POST /shorten` requires an `X-API-Key` header; the resolver's redirect path is deliberately
+`POST /v1/shorten` requires an `X-API-Key` header; the resolver's redirect path is deliberately
 public and must stay that way. Validation lives in `shortener-service`'s `security` package: the
-filter is registered against the `/shorten` URL pattern only (a bare `@Component` filter would map
-to `/*` and break actuator probes). Only SHA-256 digests of accepted keys are configured
-(`shortener.api-key.hashes` / `SHORTENER_API_KEY_HASHES`), which is why they live in non-secret
-config (`.env`, the chart's ConfigMap) rather than `.env.secrets` — a digest cannot be replayed.
-Local development key: `hopr-local-dev-key`.
+filter is registered against the `/v1/shorten` and `/v1/links` URL patterns only (a bare
+`@Component` filter would map to `/*` and break actuator probes). Configuration is
+`<sha-256 digest>:<owner-id>` pairs (`shortener.api-key.owners` / `SHORTENER_API_KEY_OWNERS`):
+digests only, which is why they live in non-secret config (`.env`, the chart's ConfigMap) rather
+than `.env.secrets` — a digest cannot be replayed. The filter publishes the matched owner id as
+the `ApiKeyFilter.OWNER_ID_ATTRIBUTE` request attribute, which the controllers take as a
+`@RequestAttribute` and pass down; that attribute is the only source of owner identity, never the
+request body. Local development key: `hopr-local-dev-key` (owner `local-dev`); add a second
+`<digest>:<owner-id>` pair to demonstrate scoping by hand. Rows written before `owner_id` existed
+are stamped with the owner id `legacy` by `LegacyOwnerBackfill` (a runner, not a Flyway
+migration — Scylla cannot UPDATE by a non-key column). It is off unless
+`shortener.legacy-owner-backfill.enabled=true` is passed deliberately, because the scan reads the
+whole table and must not gate every pod's readiness — run it once on one instance, not per
+replica. It is an `ApplicationRunner`, so the process keeps running after stamping: the operator
+watches for the completion log line and stops it, and the in-cluster pod must carry the chart's
+`hopr-config`/`hopr-secret` `envFrom` or it never reaches Scylla — README's
+authorization-scoping note has the working command. Idempotent, and `IF EXISTS` keeps it from
+resurrecting a row that expired mid-scan.
+
+## API versioning
+
+`shortener-service`'s routes live under a `/v1` URL path prefix; the old unversioned paths were
+removed outright rather than aliased or redirected (the only client is this repo's frontend).
+`resolver-service`'s redirect (`GET /{shortKey}`) is deliberately NOT versioned — an issued short
+link has to keep resolving forever, so it must not embed an API version that could be retired.
+Adding `/v2` means a second controller (or `@RequestMapping`) beside `/v1`, plus the gateway
+(`api-gateway/nginx.conf`) and ingress (`k8s/hopr-chart/templates/ingress.yaml`), which route the
+whole `/v1` prefix in one rule each.
 
 ## Local config and secrets
 

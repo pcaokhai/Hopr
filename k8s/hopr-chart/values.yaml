@@ -78,11 +78,13 @@ config:
   clickAnalyticsServerPort: "8084"
   frontendPort: "3000"
   shortenerDomain: "https://localhost:8443/"
-  # REQUIRED, no default: comma-separated SHA-256 digests of the keys accepted on POST /shorten.
-  # Left empty so no deployment silently accepts the development key published in this repo --
-  # shortener-service refuses to start on an empty list. Mint one per environment:
+  # REQUIRED, no default: comma-separated `<sha-256 digest>:<owner-id>` pairs for the keys
+  # accepted on POST /v1/shorten and the /v1/links management endpoints. The owner id scopes
+  # what each key can list, read, update, and delete. Left empty so no deployment silently
+  # accepts the development keys published in this repo -- shortener-service refuses to start on
+  # an empty list. Mint one per environment:
   #   KEY=$(openssl rand -hex 32); printf %s "$KEY" | shasum -a 256
-  shortenerApiKeyHashes: ""
+  shortenerApiKeyOwners: ""
 
 # Per-service replica counts and resource requests/limits, plus HPA settings for the two
 # request-serving hot paths. These are starter numbers, not measured production budgets --

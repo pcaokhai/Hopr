@@ -49,8 +49,21 @@ class LinkManagementUseCaseTest {
     }
 
     private UrlMapping mapping() {
-        return new UrlMapping("abc123", "https://example.com", null,
+        return mapping("owner-a");
+    }
+
+    private UrlMapping mapping(String ownerId) {
+        UrlMapping mapping = new UrlMapping("abc123", "https://example.com", null,
                 null, Instant.parse("2026-01-01T00:00:00Z"), "ACTIVE");
+        mapping.setOwnerId(ownerId);
+        return mapping;
+    }
+
+    @Test
+    void get_throwsNotFound_whenTheLinkBelongsToAnotherOwner() {
+        when(urlRepository.findById("abc123")).thenReturn(java.util.Optional.of(mapping("owner-b")));
+
+        assertThrows(LinkNotFoundException.class, () -> useCase.get("abc123", "owner-a"));
     }
 
     @Test
@@ -58,7 +71,7 @@ class LinkManagementUseCaseTest {
         Slice<UrlMapping> slice = new SliceImpl<>(List.of(mapping()), PageRequest.of(0, 50), false);
         when(cassandra.slice(any(Query.class), org.mockito.ArgumentMatchers.eq(UrlMapping.class))).thenReturn(slice);
 
-        LinkListResponse result = useCase.list(50, null);
+        LinkListResponse result = useCase.list(50, null, "owner-a");
 
         assertEquals(1, result.links().size());
         assertEquals("abc123", result.links().get(0).shortKey());
@@ -69,7 +82,7 @@ class LinkManagementUseCaseTest {
     void get_returnsLink_whenPresent() {
         when(urlRepository.findById("abc123")).thenReturn(Optional.of(mapping()));
 
-        LinkResponse response = useCase.get("abc123");
+        LinkResponse response = useCase.get("abc123", "owner-a");
 
         assertEquals("https://example.com", response.longUrl());
         assertEquals("ACTIVE", response.status());
@@ -79,7 +92,7 @@ class LinkManagementUseCaseTest {
     void get_throwsNotFound_whenAbsent() {
         when(urlRepository.findById("missing")).thenReturn(Optional.empty());
 
-        assertThrows(LinkNotFoundException.class, () -> useCase.get("missing"));
+        assertThrows(LinkNotFoundException.class, () -> useCase.get("missing", "owner-a"));
     }
 
     @Test
@@ -89,7 +102,7 @@ class LinkManagementUseCaseTest {
         Cache cache = mock(Cache.class);
         when(cacheManager.getCache("keys")).thenReturn(cache);
 
-        LinkResponse response = useCase.update("abc123", new UpdateLinkRequest("https://updated.example.com", null));
+        LinkResponse response = useCase.update("abc123", new UpdateLinkRequest("https://updated.example.com", null), "owner-a");
 
         assertEquals("https://updated.example.com", response.longUrl());
         verify(cache).evict("abc123");
@@ -107,7 +120,7 @@ class LinkManagementUseCaseTest {
         Cache cache = mock(Cache.class);
         when(cacheManager.getCache("keys")).thenReturn(cache);
 
-        useCase.update("abc123", new UpdateLinkRequest(null, 3600L));
+        useCase.update("abc123", new UpdateLinkRequest(null, 3600L), "owner-a");
 
         verify(cassandra).insert(any(UrlMapping.class), any(InsertOptions.class));
     }
@@ -117,7 +130,7 @@ class LinkManagementUseCaseTest {
         when(urlRepository.findById("missing")).thenReturn(Optional.empty());
 
         assertThrows(LinkNotFoundException.class,
-                () -> useCase.update("missing", new UpdateLinkRequest("https://example.com", null)));
+                () -> useCase.update("missing", new UpdateLinkRequest("https://example.com", null), "owner-a"));
     }
 
     @Test
@@ -126,7 +139,7 @@ class LinkManagementUseCaseTest {
         Cache cache = mock(Cache.class);
         when(cacheManager.getCache("keys")).thenReturn(cache);
 
-        useCase.delete("abc123");
+        useCase.delete("abc123", "owner-a");
 
         verify(urlRepository).deleteById("abc123");
         verify(cache).evict("abc123");
@@ -136,6 +149,6 @@ class LinkManagementUseCaseTest {
     void delete_throwsNotFound_whenAbsent() {
         when(urlRepository.findById("missing")).thenReturn(Optional.empty());
 
-        assertThrows(LinkNotFoundException.class, () -> useCase.delete("missing"));
+        assertThrows(LinkNotFoundException.class, () -> useCase.delete("missing", "owner-a"));
     }
 }

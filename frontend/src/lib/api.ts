@@ -1,4 +1,4 @@
-// POST /shorten is proxied through this app's own server-side route (src/app/api/shorten/route.ts),
+// POST /v1/shorten is proxied through this app's own server-side route (src/app/api/shorten/route.ts),
 // which holds the API key. The browser never sees a key.
 const SHORTEN_URL = "/api/shorten";
 

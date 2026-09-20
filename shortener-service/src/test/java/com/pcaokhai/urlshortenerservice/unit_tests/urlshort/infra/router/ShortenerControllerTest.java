@@ -31,10 +31,10 @@ class ShortenerControllerTest {
         ShortenRequest request = new ShortenRequest("https://example.com", "abc123");
         ShortenResponse expectedResponse = new ShortenResponse("http://short.ly/abc123");
 
-        when(shortenerUseCase.shorten(request)).thenReturn(expectedResponse);
+        when(shortenerUseCase.shorten(request, "owner-a")).thenReturn(expectedResponse);
 
         // Act
-        ResponseEntity<ShortenResponse> response = shortenerController.shortenUrl(request);
+        ResponseEntity<ShortenResponse> response = shortenerController.shortenUrl(request, "owner-a");
 
         // Assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -45,6 +45,6 @@ class ShortenerControllerTest {
         assertEquals("http://short.ly/abc123", body.shortUrl());
         
 
-        verify(shortenerUseCase, times(1)).shorten(request);
+        verify(shortenerUseCase, times(1)).shorten(request, "owner-a");
     }
 }

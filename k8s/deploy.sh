@@ -38,6 +38,11 @@ KEY_FILE="$SCRIPT_DIR/.dev-api-key"
 chmod 600 "$KEY_FILE"
 SHORTEN_API_KEY=$(tr -d '\n' < "$KEY_FILE")
 SHORTEN_API_KEY_HASH=$(printf %s "$SHORTEN_API_KEY" | shasum -a 256 | cut -d' ' -f1)
+# Each accepted key is configured with the owner it identifies; the cluster gets one key, so
+# one owner. A second `<digest>:<owner>` pair is comma separated -- and a comma also separates
+# assignments in `helm --set`, so pairs are passed below with --set-string and an escaped
+# comma (`aaa:owner-a\,bbb:owner-b`), which helm reads as one value rather than two keys.
+SHORTEN_API_KEY_OWNERS="$SHORTEN_API_KEY_HASH:local-dev"
 
 # Self-signed TLS material for the ingress, minted once and reused (regenerating on every
 # run would hand clients a different cert each time). DEV ONLY -- nothing trusts it; a real
@@ -127,7 +132,7 @@ kubectl -n ingress-nginx rollout status deployment/ingress-nginx-controller --ti
 # URL services. On a re-run the release already exists and they are left running.
 if ! helm status hopr --namespace hopr >/dev/null 2>&1; then
   helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr --set urlServices.enabled=false \
-    --set shortenApiKey="$SHORTEN_API_KEY" --set config.shortenerApiKeyHashes="$SHORTEN_API_KEY_HASH" \
+    --set shortenApiKey="$SHORTEN_API_KEY" --set-string config.shortenerApiKeyOwners="${SHORTEN_API_KEY_OWNERS//,/\\,}" \
     --set-file tls.crt="$CRT_FILE" --set-file tls.key="$KEY_FILE_TLS"
 fi
 
@@ -143,7 +148,7 @@ done
 kill "$PF_PID" 2>/dev/null || true; trap - EXIT
 
 helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr \
-  --set shortenApiKey="$SHORTEN_API_KEY" --set config.shortenerApiKeyHashes="$SHORTEN_API_KEY_HASH" \
+  --set shortenApiKey="$SHORTEN_API_KEY" --set-string config.shortenerApiKeyOwners="${SHORTEN_API_KEY_OWNERS//,/\\,}" \
   --set-file tls.crt="$CRT_FILE" --set-file tls.key="$KEY_FILE_TLS"
 
 kubectl rollout status deployment/config-server -n hopr --timeout=120s
@@ -165,4 +170,4 @@ case "$served" in
 esac
 
 # -k: the certificate above is self-signed, so no client trusts it without an override.
-echo "Hopr is up. Try: curl -k -X POST https://localhost:8443/shorten -d '{\"longUrl\":\"https://example.com\"}' -H 'Content-Type: application/json' -H \"X-API-Key: $SHORTEN_API_KEY\""
+echo "Hopr is up. Try: curl -k -X POST https://localhost:8443/v1/shorten -d '{\"longUrl\":\"https://example.com\"}' -H 'Content-Type: application/json' -H \"X-API-Key: $SHORTEN_API_KEY\""

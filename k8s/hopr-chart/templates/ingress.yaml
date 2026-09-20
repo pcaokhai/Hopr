@@ -22,8 +22,8 @@ spec:
           # The frontend sits behind this ingress so its /api/shorten route -- which holds
           # the server-side API key -- is rate limited per real client address by the
           # limit-rps annotation above. The redirect regex below is anchored and excludes
-          # these prefixes, so it cannot claim them; /shorten keeps its Exact path and the
-          # `/` Prefix fallback still goes to shortener-service.
+          # these prefixes, so it cannot claim them; the versioned `/v1` API keeps its own
+          # Prefix path and the `/` Prefix fallback still goes to shortener-service.
           - path: /api
             pathType: Prefix
             backend:
@@ -45,8 +45,11 @@ spec:
                 name: frontend
                 port:
                   number: {{ .Values.config.frontendPort }}
-          - path: /shorten
-            pathType: Exact
+          # Every versioned API route (/v1/shorten, /v1/links, ...) in one rule: the version
+          # prefix is what makes a single path enough, where the unversioned API needed a rule
+          # per endpoint.
+          - path: /v1
+            pathType: Prefix
             backend:
               service:
                 name: shortener-service
@@ -59,9 +62,10 @@ spec:
           # `/`, so only the `$` is written here. Unanchored it would claim
           # `/dashboard/<slug>` by matching a segment mid-path, and without the trailing `$`
           # it would claim every frontend asset under `/_next/`. The lookahead covers the
-          # slash-free literals the anchors cannot. Upgrade path: split into two Ingress objects (one Exact,
+          # slash-free literal the anchors cannot (`/v1/...` contains a slash, so the character
+          # class already excludes it). Upgrade path: split into two Ingress objects (one Exact,
           # one regex) if more reserved literal paths are added later.
-          - path: /(?!shorten$|dashboard$)[a-zA-Z0-9_-]{4,}$
+          - path: /(?!dashboard$)[a-zA-Z0-9_-]{4,}$
             pathType: ImplementationSpecific
             backend:
               service:
