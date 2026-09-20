@@ -8,8 +8,9 @@
 # scheduler actually spreads replicas across zones, is observable only on a real
 # multi-node, multi-zone cluster. See k8s/README.md.
 #
-# Plain text matching rather than a YAML parser: the repo's Python has no PyYAML and
-# pulling a dependency in for two blocks of literal output is not worth it.
+# No YAML parser: the repo's Python has no PyYAML and yq is not a dependency here, so
+# each field is looked up independently inside its own block rather than by matching a
+# fixed window of literal output (which would break on any benign reordering).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -22,35 +23,36 @@ render() { helm template hopr ./k8s/hopr-chart --set tls.crt=dummy --set tls.key
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
-# `grep -A` window from the named anchor, whitespace-normalised for comparison.
-block() { grep -A"$2" -- "$1" | sed 's/[[:space:]]\{1,\}/ /g;s/^ //;s/ $//'; }
+# The `---`-separated document containing the given line.
+doc() { awk -v pat="$1" 'BEGIN{RS="\n---\n"} $0 ~ pat {print; exit}'; }
+
+# The indented block introduced by the given key, plus the key's own line.
+block() { awk -v key="$1" '
+  $0 ~ "^( *)" key "$" { match($0, /^ */); ind = RLENGTH; print; inb = 1; next }
+  inb { match($0, /^ */); if (RLENGTH <= ind && $0 !~ /^ *$/) exit; print }'; }
+
+# Value of `key:` inside a block, whitespace- and list-marker-normalised.
+value() { sed -n "s/^[ -]*$1: *//p"; }
+
+expect() { [ "$2" = "$3" ] || fail "$1: got '$2', want '$3'"; }
 
 for svc in shortener-service resolver-service; do
-  pdb=$(render -s templates/pdb.yaml | block "name: $svc" 6)
-  expected="name: $svc
-namespace: hopr
-spec:
-maxUnavailable: 1
-selector:
-matchLabels:
-app: $svc"
-  [ "$pdb" = "$expected" ] || fail "PodDisruptionBudget/$svc: got
-$pdb
-want
-$expected"
+  pdb=$(render -s templates/pdb.yaml | doc "name: $svc\n")
+  [ -n "$pdb" ] || fail "no PodDisruptionBudget rendered for $svc"
+  expect "PodDisruptionBudget/$svc kind" "$(printf '%s' "$pdb" | value kind)" "PodDisruptionBudget"
+  expect "PodDisruptionBudget/$svc maxUnavailable" "$(printf '%s' "$pdb" | value maxUnavailable)" "1"
+  expect "PodDisruptionBudget/$svc selector" \
+    "$(printf '%s' "$pdb" | block 'selector:' | value app)" "$svc"
 
-  tsc=$(render -s "templates/$svc.yaml" | block "topologySpreadConstraints:" 6)
-  expected="topologySpreadConstraints:
-- maxSkew: 1
-topologyKey: topology.kubernetes.io/zone
-whenUnsatisfiable: ScheduleAnyway
-labelSelector:
-matchLabels:
-app: $svc"
-  [ "$tsc" = "$expected" ] || fail "topologySpreadConstraints on $svc: got
-$tsc
-want
-$expected"
+  tsc=$(render -s "templates/$svc.yaml" | block 'topologySpreadConstraints:')
+  [ -n "$tsc" ] || fail "no topologySpreadConstraints rendered on $svc"
+  expect "topologySpreadConstraints on $svc: maxSkew" "$(printf '%s' "$tsc" | value maxSkew)" "1"
+  expect "topologySpreadConstraints on $svc: topologyKey" \
+    "$(printf '%s' "$tsc" | value topologyKey)" "topology.kubernetes.io/zone"
+  expect "topologySpreadConstraints on $svc: whenUnsatisfiable" \
+    "$(printf '%s' "$tsc" | value whenUnsatisfiable)" "ScheduleAnyway"
+  expect "topologySpreadConstraints on $svc: labelSelector" \
+    "$(printf '%s' "$tsc" | block 'labelSelector:' | value app)" "$svc"
 
   echo "ok: $svc PodDisruptionBudget + topologySpreadConstraints"
 done

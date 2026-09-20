@@ -19,7 +19,6 @@ DoNotSchedule once the cluster actually has zones.
 */}}
 {{- define "hopr.topologySpreadConstraints" -}}
 {{- with .root.Values.topologySpread }}
-{{- if .enabled }}
 topologySpreadConstraints:
   - maxSkew: {{ .maxSkew }}
     topologyKey: {{ .topologyKey }}
@@ -27,6 +26,5 @@ topologySpreadConstraints:
     labelSelector:
       matchLabels:
         app: {{ $.app }}
-{{- end }}
 {{- end }}
 {{- end -}}

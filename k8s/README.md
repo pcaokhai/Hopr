@@ -310,7 +310,9 @@ admission/validation via
 helm template hopr ./k8s/hopr-chart --set tls.crt=d --set tls.key=d \
   -s templates/pdb.yaml -s templates/shortener-service.yaml \
   -s templates/resolver-service.yaml | kubectl apply --dry-run=server -f -
-``` Observing the actual behaviour — a drain blocking at the budget, or
+```
+
+Observing the actual behaviour — a drain blocking at the budget, or
 replicas landing in different zones — requires a real multi-node, multi-zone
 cluster (a managed EKS/GKE/AKS cluster with genuine zone labels). A production
 values file on such a cluster should also reconsider

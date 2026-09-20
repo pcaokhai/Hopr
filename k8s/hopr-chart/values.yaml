@@ -62,7 +62,6 @@ tls: {}
 # Inert on this repo's single-node kind cluster, which has no zone labels at all; a real
 # multi-zone cluster should override whenUnsatisfiable to DoNotSchedule.
 topologySpread:
-  enabled: true
   topologyKey: topology.kubernetes.io/zone
   maxSkew: 1
   whenUnsatisfiable: ScheduleAnyway
