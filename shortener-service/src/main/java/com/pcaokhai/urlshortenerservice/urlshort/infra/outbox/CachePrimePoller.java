@@ -15,6 +15,7 @@
  */
 package com.pcaokhai.urlshortenerservice.urlshort.infra.outbox;
 
+import com.pcaokhai.common.event.UrlCreatedEvent;
 import com.pcaokhai.common.url.model.UrlMapping;
 import com.pcaokhai.common.url.repository.UrlRepository;
 import org.springframework.cache.CacheManager;
@@ -35,10 +36,10 @@ import java.util.List;
  * PROCESSED. A crash between {@code DbCacheSaver}'s persist and this step no longer loses
  * the cache-priming step silently -- the next poll picks the event back up.
  *
- * <p>This is also the extensibility point Phase 5's next PR (publishing {@code UrlCreated}
- * events to Kafka) is expected to plug into: an additional consumer reading the same PENDING
- * events and, once it has published, moving its own copy of the bookkeeping to PROCESSED --
- * without this class or the outbox table needing to know Kafka exists.
+ * <p>Also publishes {@link UrlCreatedEvent} to Kafka for each event it processes (via
+ * {@link UrlCreatedEventPublisher}), rather than running a second poll-and-mark-processed loop
+ * over the same PENDING partitions -- the table's single {@code status} column can't cleanly
+ * track two independent consumers' progress at once.
  */
 @Component
 public class CachePrimePoller {
@@ -48,11 +49,17 @@ public class CachePrimePoller {
     private final CassandraOperations cassandra;
     private final UrlRepository urlRepository;
     private final CacheManager cacheManager;
+    private final UrlCreatedEventPublisher urlCreatedEventPublisher;
 
-    public CachePrimePoller(CassandraOperations cassandra, UrlRepository urlRepository, CacheManager cacheManager) {
+    public CachePrimePoller(
+            CassandraOperations cassandra,
+            UrlRepository urlRepository,
+            CacheManager cacheManager,
+            UrlCreatedEventPublisher urlCreatedEventPublisher) {
         this.cassandra = cassandra;
         this.urlRepository = urlRepository;
         this.cacheManager = cacheManager;
+        this.urlCreatedEventPublisher = urlCreatedEventPublisher;
     }
 
     /**
@@ -76,9 +83,13 @@ public class CachePrimePoller {
     }
 
     private void prime(OutboxEvent event) {
-        urlRepository.findById(event.getShortKey())
-                .filter(mapping -> mapping.getExpiresAt() == null)
-                .ifPresent(this::cache);
+        urlRepository.findById(event.getShortKey()).ifPresent(mapping -> {
+            if (mapping.getExpiresAt() == null) {
+                cache(mapping);
+            }
+            urlCreatedEventPublisher.publish(
+                    UrlCreatedEvent.of(mapping.getShortKey(), mapping.getLongUrl(), event.getCreatedAt()));
+        });
         markProcessed(event);
     }
 

@@ -4,6 +4,7 @@ import com.pcaokhai.common.url.model.UrlMapping;
 import com.pcaokhai.common.url.repository.UrlRepository;
 import com.pcaokhai.urlshortenerservice.urlshort.infra.outbox.CachePrimePoller;
 import com.pcaokhai.urlshortenerservice.urlshort.infra.outbox.OutboxEvent;
+import com.pcaokhai.urlshortenerservice.urlshort.infra.outbox.UrlCreatedEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,11 +43,14 @@ class CachePrimePollerTest {
     @Mock
     private CassandraBatchOperations batchOperations;
 
+    @Mock
+    private UrlCreatedEventPublisher urlCreatedEventPublisher;
+
     private CachePrimePoller poller;
 
     @BeforeEach
     void setUp() {
-        poller = new CachePrimePoller(cassandra, urlRepository, cacheManager);
+        poller = new CachePrimePoller(cassandra, urlRepository, cacheManager, urlCreatedEventPublisher);
     }
 
     @Test
@@ -66,6 +70,8 @@ class CachePrimePollerTest {
         poller.processBucket(bucket);
 
         verify(cache).put("abc123", mapping);
+        verify(urlCreatedEventPublisher).publish(argThat(event -> event.shortKey().equals("abc123")
+                && event.longUrl().equals("https://example.com")));
         verify(batchOperations).delete(pending);
         verify(batchOperations).insert(argThat((OutboxEvent e) -> e.getStatus().equals(OutboxEvent.STATUS_PROCESSED)
                 && e.getEventId().equals(pending.getEventId())));

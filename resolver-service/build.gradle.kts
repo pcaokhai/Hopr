@@ -9,8 +9,11 @@ dependencies {
     implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("org.springframework.cloud:spring-cloud-starter-config")
     implementation("org.springframework.retry:spring-retry")
+    implementation("org.springframework.kafka:spring-kafka")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.testcontainers:testcontainers-cassandra")
+    testImplementation("org.testcontainers:kafka:1.21.4")
+    testImplementation("org.springframework.kafka:spring-kafka-test")
 }
 
 tasks.named<Test>("test") {
