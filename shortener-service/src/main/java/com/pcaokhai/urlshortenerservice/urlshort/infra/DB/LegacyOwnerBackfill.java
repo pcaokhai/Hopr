@@ -47,6 +47,12 @@ import org.springframework.stereotype.Component;
  * <pre>{@code
  * java -jar shortener-service.jar --shortener.legacy-owner-backfill.enabled=true
  * }</pre>
+ *
+ * <p>This is an {@link ApplicationRunner}, so the process does <em>not</em> exit once the rows
+ * are stamped: the rest of the service starts as usual. Watch for the
+ * {@code Legacy owner backfill complete} log line and stop the instance. README's
+ * authorization-scoping note carries the in-cluster command, which has to hand the pod the same
+ * {@code hopr-config}/{@code hopr-secret} environment the chart's Deployment does.
  */
 @Component
 @ConditionalOnProperty(name = "shortener.legacy-owner-backfill.enabled", havingValue = "true")
@@ -58,9 +64,12 @@ public class LegacyOwnerBackfill implements ApplicationRunner {
     private static final int PAGE_SIZE = 500;
 
     private final CqlSession session;
+    private final PreparedStatement update;
 
     public LegacyOwnerBackfill(CqlSession session) {
         this.session = session;
+        this.update = session.prepare(
+                "UPDATE urls USING TTL ? SET owner_id = ? WHERE short_key = ? IF EXISTS");
     }
 
     @Override
@@ -87,9 +96,7 @@ public class LegacyOwnerBackfill implements ApplicationRunner {
     // the resolver would then cache for 12h and NPE on. TTL(long_url) carries the row's
     // remaining lifetime so the stamped column expires with the rest of it; `USING TTL 0` on a
     // row that never expires means exactly "no TTL".
-    public boolean stampOwner(String shortKey, int ttlSeconds) {
-        PreparedStatement update = session.prepare(
-                "UPDATE urls USING TTL ? SET owner_id = ? WHERE short_key = ? IF EXISTS");
+    boolean stampOwner(String shortKey, int ttlSeconds) {
         return session.execute(update.bind(ttlSeconds, LEGACY_OWNER_ID, shortKey)).wasApplied();
     }
 }

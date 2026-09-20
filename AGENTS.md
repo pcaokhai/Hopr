@@ -115,7 +115,10 @@ are stamped with the owner id `legacy` by `LegacyOwnerBackfill` (a runner, not a
 migration — Scylla cannot UPDATE by a non-key column). It is off unless
 `shortener.legacy-owner-backfill.enabled=true` is passed deliberately, because the scan reads the
 whole table and must not gate every pod's readiness — run it once on one instance, not per
-replica; see README's authorization-scoping note. Idempotent, and `IF EXISTS` keeps it from
+replica. It is an `ApplicationRunner`, so the process keeps running after stamping: the operator
+watches for the completion log line and stops it, and the in-cluster pod must carry the chart's
+`hopr-config`/`hopr-secret` `envFrom` or it never reaches Scylla — README's
+authorization-scoping note has the working command. Idempotent, and `IF EXISTS` keeps it from
 resurrecting a row that expired mid-scan.
 
 ## API versioning

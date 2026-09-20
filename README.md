@@ -289,12 +289,26 @@ below passes `-k` and a browser will show a warning you have to click through �
 > `urls` table and would otherwise gate every pod's readiness:
 >
 > ```bash
+> # locally
 > java -jar shortener-service.jar --shortener.legacy-owner-backfill.enabled=true
-> # in-cluster: kubectl run hopr-backfill --rm -it --image=<shortener image> -- \
-> #   --shortener.legacy-owner-backfill.enabled=true
+>
+> # in-cluster: the pod needs the same config/secret env the chart's Deployment gets via
+> # envFrom, or it has no Scylla contact points and never reaches the database.
+> IMG=hopr/shortener-service:<tag>
+> kubectl run hopr-backfill -n hopr --image="$IMG" --restart=Never --overrides="$(cat <<JSON
+> {"spec":{"containers":[{"name":"hopr-backfill","image":"$IMG",
+>   "args":["--shortener.legacy-owner-backfill.enabled=true"],
+>   "envFrom":[{"configMapRef":{"name":"hopr-config"}},{"secretRef":{"name":"hopr-secret"}}]}]}}
+> JSON
+> )"
+> kubectl logs -f -n hopr hopr-backfill    # wait for "Legacy owner backfill complete"
+> kubectl delete pod -n hopr hopr-backfill
 > ```
 >
-> It is idempotent, so re-running it is harmless; rows that expired mid-scan are not resurrected.
+> `LegacyOwnerBackfill` is an `ApplicationRunner`, so the process does **not** exit once the rows
+> are stamped — the rest of the service starts normally. Watch for the `Legacy owner backfill
+> complete` log line, then stop it (the `kubectl delete pod` above, or Ctrl-C locally). It is
+> idempotent, so re-running it is harmless; rows that expired mid-scan are not resurrected.
 >
 > 🔢 **Versioning**: the write and management API lives under `/v1/`, so a future breaking change
 > can ship as `/v2/` beside it. Short links themselves (`GET /{shortKey}`) stay unversioned: they

@@ -1,9 +1,8 @@
-package com.pcaokhai.urlshortenerservice.integration_tests.urlshort.persistence;
+package com.pcaokhai.urlshortenerservice.urlshort.infra.DB;
 
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.pcaokhai.common.url.repository.UrlRepository;
 import com.pcaokhai.urlshortenerservice.integration_tests.urlshort.config.BaseIntegrationTest;
-import com.pcaokhai.urlshortenerservice.urlshort.infra.DB.LegacyOwnerBackfill;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
