@@ -66,6 +66,19 @@ topologySpread:
   maxSkew: 1
   whenUnsatisfiable: ScheduleAnyway
 
+# Canary steps for the two request-serving Rollouts (shortener, resolver). Shared by both:
+# they are the same shape of hot path, and a per-service schedule would be two knobs nobody
+# has a reason to set differently yet. See templates/shortener-service.yaml for why these
+# weights are replica-ratio approximations rather than true traffic percentages, and why the
+# pauses are timed rather than an indefinite manual gate.
+canary:
+  steps:
+    - setWeight: 20
+    - pause: {duration: 60s}
+    - setWeight: 50
+    - pause: {duration: 60s}
+    - setWeight: 100
+
 urlServices:
   # shortener-service and resolver-service open a CqlSession against keyspace hopr at
   # boot, so deploy.sh installs the chart once with this off, migrates, then turns it on.

@@ -70,3 +70,26 @@ grep -q 'SHORTENER_API_KEY_OWNERS: "abc123:owner-a"' <<<"$configmap" \
   || fail "ConfigMap does not carry the key-to-owner pairs: $configmap"
 
 echo "ok: ingress /v1 routing + SHORTENER_API_KEY_OWNERS ConfigMap entry"
+
+# The progressive-delivery surface: both hot-path services must render as Argo Rollouts with
+# the canary steps, and their HPAs must target the Rollout. An HPA left pointing at
+# `kind: Deployment` would silently scale nothing once the Deployment is gone.
+for svc in shortener-service resolver-service; do
+  # helm sorts rendered documents by kind, so select the document by kind, not by position.
+  rollout=$(render -s "templates/$svc.yaml" | doc "kind: Rollout")
+  [ -n "$rollout" ] || fail "$svc does not render a Rollout"
+  grep -q "name: $svc$" <<<"$rollout" || fail "Rollout is not named $svc"
+  steps=$(printf '%s' "$rollout" | block 'steps:')
+  for want in 'setWeight: 20' 'duration: 60s' 'setWeight: 50' 'setWeight: 100'; do
+    grep -qF -- "$want" <<<"$steps" || fail "$svc canary steps missing '$want': $steps"
+  done
+  if render -s "templates/$svc.yaml" | grep -q 'kind: Deployment'; then
+    fail "$svc still renders a Deployment"
+  fi
+
+  hpa=$(render -s templates/hpa.yaml | doc "name: $svc\n")
+  expect "HPA/$svc scaleTargetRef kind" \
+    "$(printf '%s' "$hpa" | block 'scaleTargetRef:' | value kind)" "Rollout"
+
+  echo "ok: $svc Rollout canary steps + HPA scaleTargetRef"
+done

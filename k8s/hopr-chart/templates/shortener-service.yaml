@@ -1,6 +1,31 @@
 {{- if .Values.urlServices.enabled }}
-apiVersion: apps/v1
-kind: Deployment
+{{- /*
+An Argo Rollouts Rollout, not a Deployment. A plain RollingUpdate replaces every pod on a
+fixed schedule as soon as each new pod passes its own readiness probe -- a probe that only
+says "this process started", not "this version is healthy under real traffic". A Rollout's
+canary strategy sends a controlled slice of live traffic to the new version, holds there,
+and lets an operator (or, later, an automated analysis) abort before the remaining pods are
+replaced. See k8s/README.md for how to drive and observe one.
+
+Traffic splitting here is replica-ratio based: with no service mesh and no ingress
+traffic-router configured, Argo Rollouts approximates `setWeight: 20` by running ~20% of
+the pods on the new ReplicaSet behind the same Service. That is coarser than true
+per-request weighting -- at 1 replica the first step already means 50% of pods -- but it
+needs nothing this repo does not already run. A real weighted canary would need
+nginx-ingress canary annotations or a mesh (`spec.strategy.canary.trafficRouting`).
+
+The pauses are timed, not manual: k8s/deploy.sh runs unattended and an indefinite
+`pause: {}` would wedge it. `kubectl argo rollouts promote` still skips a pause early, and
+`abort`/`undo` still roll back mid-canary. An automated `analysis:` step querying Phase 2's
+Prometheus metrics is the natural next step and is deliberately not here: nothing in this
+chart runs a Prometheus server for an AnalysisTemplate to query yet.
+
+Argo Rollouts skips the canary steps entirely on the initial rollout (there is no previous
+version to canary against), so a fresh `helm install` comes up at full replicas immediately;
+the steps run on every subsequent image change.
+*/}}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: shortener-service
   namespace: {{ .Values.namespace }}
@@ -8,14 +33,10 @@ spec:
   # An HPA (see hpa.yaml below) manages replica count from here on; this is only the
   # starting point before the HPA's first scaling decision.
   replicas: {{ .Values.shortenerService.replicaCount }}
-  # The start-first rolling update the old Swarm stack.yml asked for: bring the new pod
-  # up and Ready before any old pod goes away. maxUnavailable: 0 states that at every
-  # replica count rather than relying on 25%-of-1 rounding to zero.
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
+    canary:
+      steps:
+        {{- toYaml .Values.canary.steps | nindent 8 }}
   selector:
     matchLabels:
       app: shortener-service
