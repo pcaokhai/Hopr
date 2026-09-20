@@ -45,6 +45,12 @@ a 409 for a user-chosen alias and a bounded retry under a freshly generated key 
 `UrlRepository.save` is a plain CQL INSERT, i.e. an upsert that silently overwrites an existing
 row, and is not used to write. A shorten request may set `expiresInSeconds`; `DbCacheSaver` then
 writes the row `USING TTL` so ScyllaDB itself expires and removes it — no app-level cleanup job.
+`UrlMapping` is cached JDK-serialized (both `CacheConfig`s use
+`RedisCacheConfiguration.defaultCacheConfig()`), so any change to its fields changes its implicit
+`serialVersionUID` and makes entries written by the previous build undeserializable — a 500 on the
+public redirect path until the 12h TTL lapses. Bump the `.vN` segment of the cache-name prefix in
+**both** `CacheConfig` beans whenever a cached type's shape changes; an explicit `serialVersionUID`
+does not help, since the already-written bytes carry the old one.
 Because a TTL'd row can vanish out from under a fixed-TTL cache entry, both the write-through
 cache in `DbCacheSaver` and the read-through cache in resolver's `ResolverUseCase` skip caching
 whenever `UrlMapping.getExpiresAt()` is set, so an expired link can't keep resolving from a stale

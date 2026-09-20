@@ -32,8 +32,12 @@ public class CacheConfig {
 
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
+        // `.v2` because entries are JDK-serialized: adding UrlMapping.ownerId changed the class's
+        // implicit serialVersionUID, so an entry written by the previous build now fails to
+        // deserialize. A new prefix makes those entries unreadable rather than fatal. Bump it
+        // again on the next change to a cached type's shape.
         RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
-                .prefixCacheNameWith(this.getClass().getPackageName() + ".")
+                .prefixCacheNameWith(this.getClass().getPackageName() + ".v2.")
                 .entryTtl(Duration.ofHours(12))
                 .disableCachingNullValues();
 

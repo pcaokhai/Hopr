@@ -34,7 +34,7 @@ wait_for "$RESOLVER_URL/actuator/health" resolver-service
 echo "==> seeding $LINKS short links via shortener-service"
 short_keys=()
 for i in $(seq 1 "$LINKS"); do
-  response=$(curl -sf -X POST "$SHORTENER_URL/shorten" \
+  response=$(curl -sf -X POST "$SHORTENER_URL/v1/shorten" \
     -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' \
     -d "{\"longUrl\": \"https://example.com/load-test-target-$i\"}")
   short_url=$(echo "$response" | grep -o '"shortUrl":"[^"]*"' | cut -d'"' -f4)

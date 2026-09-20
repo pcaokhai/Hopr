@@ -9,7 +9,7 @@ set -euo pipefail
 
 CHART="$(cd "$(dirname "$0")" && pwd)"
 
-helm template "$CHART" --show-only templates/ingress.yaml --show-only templates/ingress-static.yaml \
+helm template "$CHART" --set tls.crt=dummy --set tls.key=dummy --show-only templates/ingress.yaml --show-only templates/ingress-static.yaml \
   | docker run --rm -i mikefarah/yq -o=json -N ea '[.]' \
   | python3 -c '
 import json, re, sys
@@ -22,7 +22,8 @@ expected = {
     "/evil.js": "shortener-service",
     "/dashboard": "frontend",
     "/dashboard/my-link": "frontend",
-    "/shorten": "shortener-service",
+    "/v1/shorten": "shortener-service",
+    "/v1/links/abcd": "shortener-service",
     "/abcd": "resolver-service",
     "/my-link_1": "resolver-service",
 }
@@ -52,7 +53,7 @@ def route(request):
         if kind == "Exact" and path == request:
             return service
     for path, kind, service in paths:
-        if kind == "ImplementationSpecific" and re.search(path, request):
+        if kind == "ImplementationSpecific" and re.match(path, request):
             return service
     best = None
     for path, kind, service in paths:
