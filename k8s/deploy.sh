@@ -158,6 +158,10 @@ done
 ./gradlew :db-migration:migrateScylla -Pscylla.contactPoint=127.0.0.1:9042
 kill "$PF_PID" 2>/dev/null || true; trap - EXIT
 
+# On a cluster still running the pre-Rollout chart, this upgrade takes shortener-service and
+# resolver-service fully down once: the kind changed, so Helm deletes their Deployments (and
+# every pod) before the Rollouts are created, and an initial rollout skips the canary. That is
+# a one-time cutover, not steady-state -- see k8s/README.md's "Progressive delivery" section.
 helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr \
   --set shortenApiKey="$SHORTEN_API_KEY" --set-string config.shortenerApiKeyOwners="${SHORTEN_API_KEY_OWNERS//,/\\,}" \
   --set-file tls.crt="$CRT_FILE" --set-file tls.key="$KEY_FILE_TLS"

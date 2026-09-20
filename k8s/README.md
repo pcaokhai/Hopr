@@ -391,6 +391,18 @@ Note that Argo Rollouts **skips the canary steps on the very first rollout** —
 there is no previous version to canary against — so a fresh `deploy.sh` comes up
 at full replicas immediately and the steps only run on subsequent changes.
 
+**One-time cutover warning.** On a cluster that already runs this chart from
+before this change, the first `helm upgrade` that introduces these Rollouts
+takes `shortener-service` and `resolver-service` fully down for a cold Spring
+Boot start: Helm deletes the old `Deployment` (and with it every running pod)
+because the resource kind changed, the Rollout is then created from scratch, and
+per the paragraph above an initial rollout skips the canary entirely. This is
+expected, happens exactly once, and is not steady-state behaviour — every
+subsequent image change goes through the canary schedule with no capacity loss
+(`maxUnavailable: 0`). Adopting the existing ReplicaSet in place (`workloadRef`,
+or the `kubectl argo rollouts` migration path) would avoid it and is deliberately
+not done here: it is a lot of machinery for a single historical moment.
+
 **What was actually verified locally, and what wasn't.** Unlike the PDB/zone work
 below, the canary mechanics *are* fully demonstrable on this single-node `kind`
 cluster: step progression, pausing, weighting and abort are controller-side
