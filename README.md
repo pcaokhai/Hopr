@@ -269,16 +269,21 @@ below passes `-k` and a browser will show a warning you have to click through �
 
 > 🔑 **Authentication**: `POST /v1/shorten` requires an `X-API-Key` header; a request without a valid
 > key is rejected with `HTTP 401 Unauthorized` and a `{"status": 401, "message": "..."}` body. The
-> local development keys are `hopr-local-dev-key` and `hopr-local-dev-key-2`, whose SHA-256 digests
-> ship in `.env.example` as `SHORTENER_API_KEY_OWNERS` — the service only ever stores digests, never
+> local development key is `hopr-local-dev-key` (owner `local-dev`), whose SHA-256 digest
+> ships in `.env.example` as `SHORTENER_API_KEY_OWNERS` — the service only ever stores digests, never
 > the keys themselves. To mint your own: `KEY=$(openssl rand -hex 32); printf %s "$KEY" | shasum -a
 > 256`, then add a `<digest>:<owner-id>` pair to `SHORTENER_API_KEY_OWNERS` (comma-separate several)
 > and hand `$KEY` to the client.
 >
 > 🧍 **Authorization scoping**: the owner id each key maps to is stamped onto every link that key
 > creates, and the `/v1/links` management endpoints only ever see that owner's links. Another
-> owner's link answers `404`, not `403` — a `403` would confirm the short key exists. The two
-> development keys above map to two different owners so the scoping is visible locally.
+> owner's link answers `404`, not `403` — a `403` would confirm the short key exists. Add a second
+> `<digest>:<owner-id>` pair to `SHORTENER_API_KEY_OWNERS` to watch the scoping locally.
+>
+> 🕰️ **Links created before scoping existed** have no owner, so they would be unmanageable. On
+> startup `shortener-service` stamps every such row with the owner id `legacy`
+> (`LegacyOwnerBackfill`); configure a `<digest>:legacy` key to manage them. The scan is safe to
+> repeat and can be turned off with `shortener.legacy-owner-backfill.enabled=false` once done.
 >
 > 🔢 **Versioning**: the write and management API lives under `/v1/`, so a future breaking change
 > can ship as `/v2/` beside it. Short links themselves (`GET /{shortKey}`) stay unversioned: they

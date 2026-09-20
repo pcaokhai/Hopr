@@ -107,9 +107,11 @@ digests only, which is why they live in non-secret config (`.env`, the chart's C
 than `.env.secrets` — a digest cannot be replayed. The filter publishes the matched owner id as
 the `ApiKeyFilter.OWNER_ID_ATTRIBUTE` request attribute, which the controllers take as a
 `@RequestAttribute` and pass down; that attribute is the only source of owner identity, never the
-request body. Local development keys: `hopr-local-dev-key` (owner `local-dev`) and
-`hopr-local-dev-key-2` (owner `local-dev-2`) — two of them so the per-owner scoping is
-demonstrable locally.
+request body. Local development key: `hopr-local-dev-key` (owner `local-dev`); add a second
+`<digest>:<owner-id>` pair to demonstrate scoping by hand. Rows written before `owner_id` existed
+are stamped with the owner id `legacy` at startup by `LegacyOwnerBackfill` (a runner, not a Flyway
+migration — Scylla cannot UPDATE by a non-key column), which is idempotent and disableable via
+`shortener.legacy-owner-backfill.enabled`.
 
 ## API versioning
 

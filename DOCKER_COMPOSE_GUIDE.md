@@ -176,10 +176,9 @@ It should show `Up` / `running` before the other microservices report healthy.
 
 > 🔑 **API key required:** `POST /v1/shorten` needs an `X-API-Key` header, or it answers `401
 > Unauthorized`. `.env.example` ships `SHORTENER_API_KEY_OWNERS` set to the SHA-256 digests of the
-> local development keys `hopr-local-dev-key` (owner `local-dev`) and `hopr-local-dev-key-2`
-> (owner `local-dev-2`), so a fresh `cp .env.example .env` works with the commands below. Each key
-> maps to an owner, and `/v1/links` only ever shows that owner's links — use the second key to see
-> the scoping. Only digests are configured — replace them (and the keys you hand clients) for
+> local development key `hopr-local-dev-key` (owner `local-dev`), so a fresh `cp .env.example .env`
+> works with the commands below. Each key maps to an owner, and `/v1/links` only ever shows that
+> owner's links — add a second `<digest>:<owner-id>` pair to see the scoping. Only digests are configured — replace them (and the keys you hand clients) for
 > anything beyond local use. `GET /{shortKey}` redirects remain public and unauthenticated.
 
 > ⚠️ **CRITICAL REQUIREMENT:** The request payload must use the JSON key `longUrl` (do **not** use `url`).

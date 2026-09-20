@@ -39,7 +39,9 @@ chmod 600 "$KEY_FILE"
 SHORTEN_API_KEY=$(tr -d '\n' < "$KEY_FILE")
 SHORTEN_API_KEY_HASH=$(printf %s "$SHORTEN_API_KEY" | shasum -a 256 | cut -d' ' -f1)
 # Each accepted key is configured with the owner it identifies; the cluster gets one key, so
-# one owner. Add another `<digest>:<owner>` pair here to demo per-owner scoping in the cluster.
+# one owner. A second `<digest>:<owner>` pair is comma separated -- and a comma also separates
+# assignments in `helm --set`, so pairs are passed below with --set-string and an escaped
+# comma (`aaa:owner-a\,bbb:owner-b`), which helm reads as one value rather than two keys.
 SHORTEN_API_KEY_OWNERS="$SHORTEN_API_KEY_HASH:local-dev"
 
 # Self-signed TLS material for the ingress, minted once and reused (regenerating on every
@@ -130,7 +132,7 @@ kubectl -n ingress-nginx rollout status deployment/ingress-nginx-controller --ti
 # URL services. On a re-run the release already exists and they are left running.
 if ! helm status hopr --namespace hopr >/dev/null 2>&1; then
   helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr --set urlServices.enabled=false \
-    --set shortenApiKey="$SHORTEN_API_KEY" --set config.shortenerApiKeyOwners="$SHORTEN_API_KEY_OWNERS" \
+    --set shortenApiKey="$SHORTEN_API_KEY" --set-string config.shortenerApiKeyOwners="${SHORTEN_API_KEY_OWNERS//,/\\,}" \
     --set-file tls.crt="$CRT_FILE" --set-file tls.key="$KEY_FILE_TLS"
 fi
 
@@ -146,7 +148,7 @@ done
 kill "$PF_PID" 2>/dev/null || true; trap - EXIT
 
 helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr \
-  --set shortenApiKey="$SHORTEN_API_KEY" --set config.shortenerApiKeyOwners="$SHORTEN_API_KEY_OWNERS" \
+  --set shortenApiKey="$SHORTEN_API_KEY" --set-string config.shortenerApiKeyOwners="${SHORTEN_API_KEY_OWNERS//,/\\,}" \
   --set-file tls.crt="$CRT_FILE" --set-file tls.key="$KEY_FILE_TLS"
 
 kubectl rollout status deployment/config-server -n hopr --timeout=120s

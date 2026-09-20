@@ -16,7 +16,7 @@
 export const config = {
     apiBaseUrl: 'http://localhost:80',
     endpoints: {
-        shortener: '/shorten',
+        shortener: '/v1/shorten',
         resolverBase: '/resolver'
     }
 };
