@@ -28,6 +28,7 @@ spec:
       # .timeout-per-shutdown-phase=20s in config-repo/application.yml); the kubelet
       # SIGKILLs at this limit no matter how much draining is left.
       terminationGracePeriodSeconds: 30
+      {{- include "hopr.topologySpreadConstraints" (dict "app" "shortener-service" "root" $) | nindent 6 }}
       containers:
         - name: shortener-service
           image: "hopr/shortener-service:{{ .Values.image.tag }}"
