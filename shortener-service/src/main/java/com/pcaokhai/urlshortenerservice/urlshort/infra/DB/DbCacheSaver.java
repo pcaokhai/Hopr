@@ -17,15 +17,17 @@ package com.pcaokhai.urlshortenerservice.urlshort.infra.DB;
 
 import com.datastax.oss.driver.api.core.ConsistencyLevel;
 import com.pcaokhai.common.url.model.UrlMapping;
-import org.springframework.cache.CacheManager;
+import com.pcaokhai.urlshortenerservice.urlshort.infra.outbox.OutboxEventWriter;
 import org.springframework.data.cassandra.core.CassandraOperations;
 import org.springframework.data.cassandra.core.InsertOptions;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
-/** * DbCacheSaver is responsible for saving URL mappings to the database and updating the cache.
- * Every write claims its short_key with a lightweight transaction, so a key maps to exactly one URL.
+/** * DbCacheSaver is responsible for saving URL mappings to the database and enqueueing the
+ * outbox event that a poller later consumes to prime the cache (see {@link OutboxEventWriter}
+ * and {@code CachePrimePoller}). Every write claims its short_key with a lightweight
+ * transaction, so a key maps to exactly one URL.
  *
  */
 @Component
@@ -41,11 +43,11 @@ public class DbCacheSaver {
             .build();
 
     private final CassandraOperations cassandra;
-    private final CacheManager cacheManager;
+    private final OutboxEventWriter outboxEventWriter;
 
-    public DbCacheSaver(CassandraOperations cassandra, CacheManager cacheManager) {
+    public DbCacheSaver(CassandraOperations cassandra, OutboxEventWriter outboxEventWriter) {
         this.cassandra = cassandra;
-        this.cacheManager = cacheManager;
+        this.outboxEventWriter = outboxEventWriter;
     }
 
     /**
@@ -66,7 +68,7 @@ public class DbCacheSaver {
         InsertOptions options = ttlSeconds == null ? IF_NOT_EXISTS : withTtl(ttlSeconds);
         boolean applied = cassandra.insert(urlMapping, options).wasApplied();
         if (applied && ttlSeconds == null) {
-            cache(urlMapping);
+            outboxEventWriter.enqueueCachePrimeEvent(urlMapping.getShortKey());
         }
         return applied;
     }
@@ -77,9 +79,5 @@ public class DbCacheSaver {
                 .serialConsistencyLevel(ConsistencyLevel.SERIAL)
                 .ttl(Duration.ofSeconds(ttlSeconds))
                 .build();
-    }
-
-    private void cache(UrlMapping urlMapping) {
-        cacheManager.getCache("keys").put(urlMapping.getShortKey(), urlMapping);
     }
 }
