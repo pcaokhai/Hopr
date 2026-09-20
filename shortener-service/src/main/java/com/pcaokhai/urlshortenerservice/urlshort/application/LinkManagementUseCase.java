@@ -25,6 +25,7 @@ import org.springframework.cache.CacheManager;
 import org.springframework.data.cassandra.core.CassandraOperations;
 import org.springframework.data.cassandra.core.InsertOptions;
 import org.springframework.data.cassandra.core.query.CassandraPageRequest;
+import org.springframework.data.cassandra.core.query.Criteria;
 import org.springframework.data.cassandra.core.query.Query;
 import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
@@ -37,9 +38,12 @@ import java.util.Base64;
 import java.util.List;
 
 /**
- * Use case backing {@code GET/PATCH/DELETE /links}: any caller holding the shared API key can
- * list, read, update, or delete any link -- see the PR description for why real per-owner
- * scoping is deliberately deferred to Phase 6 rather than half-built here.
+ * Use case backing {@code GET/PATCH/DELETE /v1/links}, scoped to the owner the caller's API key
+ * maps to: a caller only ever sees, changes, or deletes links its own key created.
+ *
+ * <p>A link owned by somebody else is reported as {@code 404}, not {@code 403} -- a 403 would
+ * confirm that the short key exists, which is exactly the fact the other owner's scoping is
+ * meant to hide.
  */
 @Service
 public class LinkManagementUseCase {
@@ -54,26 +58,30 @@ public class LinkManagementUseCase {
         this.cacheManager = cacheManager;
     }
 
-    // Unscoped full-table listing over Scylla's native paging state: there is no owner_id index
-    // yet (see the PR description's concept write-up), so this is honestly "every link in the
-    // system", not "my links". Fine for now only because the current auth model already lets any
-    // API-key holder see any link -- Phase 6 needs a query-first table before this can narrow.
-    public LinkListResponse list(int pageSize, String pageToken) {
+    // ponytail: owner scoping via ALLOW FILTERING over the same full-table scan, because
+    // owner_id is not part of any key -- Scylla reads every partition and discards the rows that
+    // do not match, so this is correct but scales with the whole table, not with one owner's
+    // links. Upgrade path when that stops being cheap: a query-first `urls_by_owner` table keyed
+    // on (owner_id, short_key), written alongside `urls` and read here instead.
+    public LinkListResponse list(int pageSize, String pageToken, String ownerId) {
         CassandraPageRequest pageable = pageToken == null
                 ? CassandraPageRequest.first(pageSize)
                 : CassandraPageRequest.of(CassandraPageRequest.first(pageSize), decodePageToken(pageToken));
-        Slice<UrlMapping> slice = cassandra.slice(Query.empty().pageRequest(pageable), UrlMapping.class);
+        Query query = Query.query(Criteria.where("owner_id").is(ownerId))
+                .withAllowFiltering()
+                .pageRequest(pageable);
+        Slice<UrlMapping> slice = cassandra.slice(query, UrlMapping.class);
         List<LinkResponse> links = slice.getContent().stream().map(LinkResponse::from).toList();
         String nextPageToken = slice.hasNext() ? encodePageToken((CassandraPageRequest) slice.nextPageable()) : null;
         return new LinkListResponse(links, nextPageToken);
     }
 
-    public LinkResponse get(String shortKey) {
-        return LinkResponse.from(findOrThrow(shortKey));
+    public LinkResponse get(String shortKey, String ownerId) {
+        return LinkResponse.from(findOwnedOrThrow(shortKey, ownerId));
     }
 
-    public LinkResponse update(String shortKey, UpdateLinkRequest request) {
-        UrlMapping mapping = findOrThrow(shortKey);
+    public LinkResponse update(String shortKey, UpdateLinkRequest request, String ownerId) {
+        UrlMapping mapping = findOwnedOrThrow(shortKey, ownerId);
         if (StringUtils.hasText(request.longUrl())) {
             mapping.setLongUrl(request.longUrl());
         }
@@ -99,14 +107,18 @@ public class LinkManagementUseCase {
         return cassandra.insert(mapping, options).getEntity();
     }
 
-    public void delete(String shortKey) {
-        findOrThrow(shortKey);
+    public void delete(String shortKey, String ownerId) {
+        findOwnedOrThrow(shortKey, ownerId);
         urlRepository.deleteById(shortKey);
         evictCache(shortKey);
     }
 
-    private UrlMapping findOrThrow(String shortKey) {
-        return urlRepository.findById(shortKey).orElseThrow(() -> new LinkNotFoundException(shortKey));
+    // "Not yours" and "does not exist" deliberately produce the same 404: a distinct 403 would
+    // tell one owner which short keys another owner has claimed.
+    private UrlMapping findOwnedOrThrow(String shortKey, String ownerId) {
+        return urlRepository.findById(shortKey)
+                .filter(mapping -> ownerId.equals(mapping.getOwnerId()))
+                .orElseThrow(() -> new LinkNotFoundException(shortKey));
     }
 
     // Only evicts this service's own cache entry (populated by DbCacheSaver on create). The

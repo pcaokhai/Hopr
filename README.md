@@ -67,7 +67,7 @@ flowchart TD
     Client(["Client / Browser"]) -->|HTTP Port 80| Gateway["Nginx API Gateway\n(Rate Limit: 5 req/s, Burst: 10)"]
 
     subgraph "Edge & Routing Layer"
-        Gateway -->|POST /shorten| Shortener["shortener-service\n(:8080)"]
+        Gateway -->|POST /v1/shorten| Shortener["shortener-service\n(:8080)"]
         Gateway -->|"GET /{shortKey}"| Resolver["resolver-service\n(:8083)"]
     end
 
@@ -100,7 +100,7 @@ sequenceDiagram
     participant DB as ScyllaDB
 
     Note over User, GW: Flow 1: Create Short URL
-    User->>GW: POST /shorten {"longUrl": "https://..."}
+    User->>GW: POST /v1/shorten {"longUrl": "https://..."}
     GW->>SS: Forward request
     alt Custom Alias provided
         SS->>DB: INSERT ... IF NOT EXISTS (claim alias)
@@ -267,12 +267,22 @@ below passes `-k` and a browser will show a warning you have to click through �
 
 ### 1. Shorten a URL (Auto-Generated Key)
 
-> 🔑 **Authentication**: `POST /shorten` requires an `X-API-Key` header; a request without a valid
+> 🔑 **Authentication**: `POST /v1/shorten` requires an `X-API-Key` header; a request without a valid
 > key is rejected with `HTTP 401 Unauthorized` and a `{"status": 401, "message": "..."}` body. The
-> local development key is `hopr-local-dev-key`, whose SHA-256 digest ships in `.env.example` as
-> `SHORTENER_API_KEY_HASHES` — the service only ever stores digests, never the keys themselves. To
-> mint your own: `KEY=$(openssl rand -hex 32); printf %s "$KEY" | shasum -a 256`, then put the digest
-> in `SHORTENER_API_KEY_HASHES` (comma-separate several) and hand `$KEY` to the client.
+> local development keys are `hopr-local-dev-key` and `hopr-local-dev-key-2`, whose SHA-256 digests
+> ship in `.env.example` as `SHORTENER_API_KEY_OWNERS` — the service only ever stores digests, never
+> the keys themselves. To mint your own: `KEY=$(openssl rand -hex 32); printf %s "$KEY" | shasum -a
+> 256`, then add a `<digest>:<owner-id>` pair to `SHORTENER_API_KEY_OWNERS` (comma-separate several)
+> and hand `$KEY` to the client.
+>
+> 🧍 **Authorization scoping**: the owner id each key maps to is stamped onto every link that key
+> creates, and the `/v1/links` management endpoints only ever see that owner's links. Another
+> owner's link answers `404`, not `403` — a `403` would confirm the short key exists. The two
+> development keys above map to two different owners so the scoping is visible locally.
+>
+> 🔢 **Versioning**: the write and management API lives under `/v1/`, so a future breaking change
+> can ship as `/v2/` beside it. Short links themselves (`GET /{shortKey}`) stay unversioned: they
+> are handed out to the world and must keep resolving after any API version is retired.
 >
 > Redirects (`GET /{shortKey}`) stay public and need no key — a short link only works if anyone
 > holding it can follow it.
@@ -283,7 +293,7 @@ below passes `-k` and a browser will show a warning you have to click through �
 > violations.
 
 ```bash
-curl -vk -X POST https://hopr.localhost/shorten \
+curl -vk -X POST https://hopr.localhost/v1/shorten \
   -H "X-API-Key: hopr-local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{"longUrl": "https://github.com/pcaokhai/Hopr"}'
@@ -301,7 +311,7 @@ curl -vk -X POST https://hopr.localhost/shorten \
 ### 2. Shorten a URL with Custom Alias
 
 ```bash
-curl -vk -X POST https://hopr.localhost/shorten \
+curl -vk -X POST https://hopr.localhost/v1/shorten \
   -H "X-API-Key: hopr-local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -329,7 +339,7 @@ ScyllaDB with a native per-row TTL, so the database physically drops it once the
 field keeps the pre-existing behavior of a link that never expires.
 
 ```bash
-curl -vk -X POST https://hopr.localhost/shorten \
+curl -vk -X POST https://hopr.localhost/v1/shorten \
   -H "X-API-Key: hopr-local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -374,7 +384,7 @@ The API Gateway enforces rate limiting of **5 requests/second with a burst of 10
 ```bash
 for i in {1..15}; do
   curl -sk -o /dev/null -w "Request $i: HTTP %{http_code}\n" \
-    -X POST https://hopr.localhost/shorten \
+    -X POST https://hopr.localhost/v1/shorten \
     -H "X-API-Key: hopr-local-dev-key" \
     -H "Content-Type: application/json" \
     -d '{"longUrl": "https://example.com"}'
@@ -397,9 +407,9 @@ When running locally, explore and test individual microservice APIs via Swagger 
 ## Frontend
 
 A Next.js + TypeScript + Tailwind + shadcn/ui frontend lives in `frontend/`.
-It wires the landing-page shorten form to the real `/shorten` API; the
+It wires the landing-page shorten form to the real `/v1/shorten` API; the
 dashboard and analytics screens use mock data — the backend now exposes
-`/links` list/update/delete endpoints, but the dashboard isn't wired to them
+`/v1/links` list/update/delete endpoints, but the dashboard isn't wired to them
 yet, and there is still no analytics or auth endpoint. See `frontend/README.md`
 for how to run it and what's real vs. mocked. Under Docker Compose and in the Helm chart it runs as its own
 container behind the gateway (`https://hopr.localhost/`), which is what applies
@@ -415,7 +425,7 @@ The Nginx gateway is the **TLS termination point**: it is the only component tha
 certificate and its private key. It accepts HTTPS on `443`, decrypts the request, and forwards
 it as plain HTTP to `shortener-service`, `resolver-service` or `frontend` over the private
 Docker/Kubernetes network. Port `80` holds no routes at all — it answers every path with a
-`301` to the `https://` URL, so nothing (including the `X-API-Key` header on `POST /shorten`)
+`301` to the `https://` URL, so nothing (including the `X-API-Key` header on `POST /v1/shorten`)
 can travel in cleartext to a service.
 
 Terminating at the edge and proxying plaintext inward is the normal pattern, not a hole. The
@@ -565,9 +575,9 @@ defaults; copy them as shown above. The ones worth explaining:
 | `SCYLLA_DATACENTER` | `.env` | Driver's local datacenter, required for request routing |
 | `REDIS_NODE_1` ... `REDIS_NODE_6` | `.env` | Hostnames and ports for the 6 Redis Cluster nodes |
 | `SHORTENER_DOMAIN` | `.env` | Base domain prepended to generated short URLs |
-| `SHORTENER_API_KEY_HASHES` | `.env` | Comma-separated SHA-256 digests of the API keys accepted on `POST /shorten`; digests only, never the keys |
+| `SHORTENER_API_KEY_OWNERS` | `.env` | Comma-separated `<sha-256 digest>:<owner-id>` pairs: the API keys accepted on `POST /v1/shorten` and `/v1/links`, and whose links each manages; digests only, never the keys |
 | `REDIS_PASSWORD` | `.env.secrets` | Redis credential; empty locally, set for a deployed Redis |
-| `SHORTEN_API_KEY` | `.env.frontend.secrets` | Plaintext key the frontend's server-side `/api/shorten` route presents as `X-API-Key`; its digest must appear in `SHORTENER_API_KEY_HASHES` |
+| `SHORTEN_API_KEY` | `.env.frontend.secrets` | Plaintext key the frontend's server-side `/api/shorten` route presents as `X-API-Key`; its digest must appear in `SHORTENER_API_KEY_OWNERS` |
 
 Inter-service endpoints (Config Server, keygen) are not environment variables — they come from
 each service's `application.yml` and the Config Server's `config-repo/`.

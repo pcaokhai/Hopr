@@ -114,7 +114,7 @@ class OutboxCachePrimeRecoveryIntegrationTest extends BaseIntegrationTest {
     void happyPathShortenThenPollPrimesCacheEndToEnd() throws Exception {
         ShortenRequest request = new ShortenRequest("https://example.com/happy/path", "happy1");
 
-        mockMvc.perform(post("/shorten").header("X-API-Key", "test-api-key")
+        mockMvc.perform(post("/v1/shorten").header("X-API-Key", "test-api-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk());

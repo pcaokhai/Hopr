@@ -15,6 +15,7 @@
  */
 package com.pcaokhai.urlshortenerservice.urlshort.infra.router;
 
+import com.pcaokhai.urlshortenerservice.security.ApiKeyFilter;
 import com.pcaokhai.urlshortenerservice.urlshort.annotations.ShortenUrlOperation;
 import com.pcaokhai.urlshortenerservice.urlshort.application.ShortenerUseCase;
 import com.pcaokhai.common.url.model.dto.ShortenRequest;
@@ -22,6 +23,7 @@ import com.pcaokhai.common.url.model.dto.ShortenResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,9 +31,12 @@ import org.springframework.web.bind.annotation.RestController;
 /** * Controller for handling URL shortening requests.
  * This controller processes incoming requests to shorten URLs and returns the shortened URL in the response.
  *
+ * <p>Versioned in the URL path ({@code /v1/...}) so a future breaking change to the request or
+ * response shape can ship as {@code /v2} alongside this one. The resolver's public redirect path
+ * is deliberately left unversioned -- see its controller.
  */
 @RestController
-@RequestMapping("/shorten")
+@RequestMapping("/v1/shorten")
 public class ShortenerController {
 
     private final ShortenerUseCase shortenerUseCase;
@@ -42,8 +47,10 @@ public class ShortenerController {
 
     @PostMapping
     @ShortenUrlOperation
-    public ResponseEntity<ShortenResponse> shortenUrl(@Valid @RequestBody ShortenRequest request) {
-        ShortenResponse shortUrl = shortenerUseCase.shorten(request);
+    public ResponseEntity<ShortenResponse> shortenUrl(
+            @Valid @RequestBody ShortenRequest request,
+            @RequestAttribute(ApiKeyFilter.OWNER_ID_ATTRIBUTE) String ownerId) {
+        ShortenResponse shortUrl = shortenerUseCase.shorten(request, ownerId);
         return ResponseEntity.ok(shortUrl);
     }
 }

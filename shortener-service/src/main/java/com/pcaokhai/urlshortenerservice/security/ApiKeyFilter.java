@@ -30,7 +30,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Rejects {@code /shorten} requests that do not carry a known {@code X-API-Key} header.
@@ -40,25 +41,35 @@ import java.util.List;
  * is only useful if anyone holding it can follow it, and it is served by a different service that
  * this filter never sees.
  *
- * <p>Registered against the {@code /shorten} URL pattern only (see {@link ApiKeySecurityConfig}),
- * so actuator health, info, and Prometheus scraping stay reachable to the platform.
+ * <p>Registered against the versioned {@code /v1/shorten} and {@code /v1/links} URL patterns only
+ * (see {@link ApiKeySecurityConfig}), so actuator health, info, and Prometheus scraping stay
+ * reachable to the platform.
+ *
+ * <p>Beyond authenticating the caller, the filter <em>identifies</em> it: each configured key
+ * carries an owner id, which is published as the {@link #OWNER_ID_ATTRIBUTE} request attribute
+ * for the controllers downstream to scope reads and writes by.
  */
 public class ApiKeyFilter extends OncePerRequestFilter {
 
     public static final String HEADER = "X-API-Key";
 
-    private final List<byte[]> acceptedHashes;
+    /** Request attribute carrying the authenticated caller's owner id to the controllers. */
+    public static final String OWNER_ID_ATTRIBUTE = "hopr.ownerId";
+
+    private final Map<byte[], String> ownerByHash;
     private final ObjectMapper objectMapper;
 
-    public ApiKeyFilter(List<String> acceptedHashes, ObjectMapper objectMapper) {
-        if (acceptedHashes.isEmpty()) {
+    public ApiKeyFilter(Map<String, String> ownerByHash, ObjectMapper objectMapper) {
+        if (ownerByHash.isEmpty()) {
             // Fail fast at startup rather than silently 401-ing every caller of a live deployment.
             throw new IllegalStateException(
-                    "shortener.api-key.hashes is empty: /shorten would reject every request. "
-                            + "Configure at least one SHA-256 hash (see .env.example).");
+                    "shortener.api-key.owners is empty: /v1/shorten would reject every request. "
+                            + "Configure at least one `<sha-256>:<owner-id>` entry (see .env.example).");
         }
         // Decoded once at startup, so a malformed hash fails the deployment instead of every request.
-        this.acceptedHashes = acceptedHashes.stream().map(ApiKeyFilter::decodeHex).toList();
+        Map<byte[], String> decoded = new LinkedHashMap<>();
+        ownerByHash.forEach((hash, ownerId) -> decoded.put(decodeHex(hash), ownerId));
+        this.ownerByHash = decoded;
         this.objectMapper = objectMapper;
     }
 
@@ -66,20 +77,27 @@ public class ApiKeyFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         String presented = request.getHeader(HEADER);
-        if (presented == null || !isAccepted(presented)) {
+        String ownerId = presented == null ? null : resolveOwner(presented);
+        if (ownerId == null) {
             // One message for both "missing" and "wrong": telling a caller which of the two they hit
             // only helps someone probing for valid keys.
             writeUnauthorized(response);
             return;
         }
+        request.setAttribute(OWNER_ID_ATTRIBUTE, ownerId);
         chain.doFilter(request, response);
     }
 
-    private boolean isAccepted(String presented) {
+    /** The owner the presented key identifies, or null when it is not a key we issued. */
+    private String resolveOwner(String presented) {
         byte[] digest = sha256(presented);
         // Compare digest-to-digest with a constant-time equals: a byte-by-byte String.equals leaks,
         // through response timing, how many leading characters of a guess were right.
-        return acceptedHashes.stream().anyMatch(accepted -> MessageDigest.isEqual(digest, accepted));
+        return ownerByHash.entrySet().stream()
+                .filter(entry -> MessageDigest.isEqual(digest, entry.getKey()))
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .orElse(null);
     }
 
     private static byte[] sha256(String value) {
@@ -94,7 +112,7 @@ public class ApiKeyFilter extends OncePerRequestFilter {
         try {
             return HexFormat.of().parseHex(hash.strip());
         } catch (IllegalArgumentException e) {
-            throw new IllegalStateException("shortener.api-key.hashes must be hex SHA-256 digests", e);
+            throw new IllegalStateException("shortener.api-key.owners must start with a hex SHA-256 digest", e);
         }
     }
 

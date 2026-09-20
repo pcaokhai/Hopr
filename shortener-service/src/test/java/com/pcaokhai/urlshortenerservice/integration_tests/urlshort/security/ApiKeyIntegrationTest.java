@@ -48,7 +48,7 @@ class ApiKeyIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void unauthenticatedOptionsIsRejected() throws Exception {
-        mockMvc.perform(options("/shorten")
+        mockMvc.perform(options("/v1/shorten")
                         .header("Access-Control-Request-Method", "POST")
                         .header("Origin", "http://example.com"))
                 .andExpect(status().isUnauthorized());
@@ -56,8 +56,8 @@ class ApiKeyIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void validKeyIsAccepted() throws Exception {
-        when(shortenerUseCase.shorten(any())).thenReturn(new ShortenResponse("https://short.url/abc123"));
-        mockMvc.perform(post("/shorten")
+        when(shortenerUseCase.shorten(any(), any())).thenReturn(new ShortenResponse("https://short.url/abc123"));
+        mockMvc.perform(post("/v1/shorten")
                         .header("X-API-Key", VALID_KEY)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body()))
@@ -67,25 +67,25 @@ class ApiKeyIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void missingKeyIsRejected() throws Exception {
-        mockMvc.perform(post("/shorten")
+        mockMvc.perform(post("/v1/shorten")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body()))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value(401))
                 .andExpect(jsonPath("$.message").value("Missing or invalid X-API-Key header"));
         // Rejected at the boundary: no keygen call, no row written.
-        verify(shortenerUseCase, never()).shorten(any());
+        verify(shortenerUseCase, never()).shorten(any(), any());
     }
 
     @Test
     void invalidKeyIsRejected() throws Exception {
-        mockMvc.perform(post("/shorten")
+        mockMvc.perform(post("/v1/shorten")
                         .header("X-API-Key", "not-the-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body()))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value(401));
-        verify(shortenerUseCase, never()).shorten(any());
+        verify(shortenerUseCase, never()).shorten(any(), any());
     }
 
     @Test

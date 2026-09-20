@@ -8,8 +8,8 @@ When updating this file, preserve this bar for all agents and keep entries conci
 ## Frontend
 
 `frontend/` is a Next.js (App Router) + TypeScript + Tailwind + shadcn/ui + Zustand app. See `frontend/README.md`
-for how to run it and exactly which screens are wired to the real `/shorten` API vs. backed by mock data
-(the dashboard isn't wired to the `/links` endpoints below yet, and there is still no analytics or
+for how to run it and exactly which screens are wired to the real `/v1/shorten` API vs. backed by mock data
+(the dashboard isn't wired to the `/v1/links` endpoints below yet, and there is still no analytics or
 auth endpoint). shadcn/ui here uses the Base UI component library
 (not Radix) — components use the `render` prop for polymorphism, not `asChild`, and a `Button` wrapping a
 non-native element (e.g. a `next/link`) needs `nativeButton={false}` or Base UI logs an a11y warning.
@@ -20,7 +20,7 @@ reachable only through the gateway (`api-gateway/nginx.conf` proxies `/api/`, `/
 and `/dashboard` to the `frontend` container), which is what rate-limits it per client address —
 a Next.js route handler is given no connection address, so it cannot do that itself.
 `api-gateway/rate-limit-test.sh` drives the real config in docker to prove both the limit and
-that `/shorten` and the redirect regex still reach their own services.
+that `/v1/shorten` and the redirect regex still reach their own services.
 
 ## TLS
 
@@ -83,28 +83,43 @@ sampling and endpoint exposure live in `config-server/src/main/resources/config-
 
 ## Link management
 
-`shortener-service`'s `GET/GET {shortKey}/PATCH {shortKey}/DELETE {shortKey}` under `/links`
+`shortener-service`'s `GET/GET {shortKey}/PATCH {shortKey}/DELETE {shortKey}` under `/v1/links`
 (`LinkManagementController`/`LinkManagementUseCase`) let a caller list, read, update, or delete
-any previously-shortened link, gated by the same `X-API-Key` filter as `/shorten` — see
-`ApiKeySecurityConfig`. There is no per-owner scoping: the `urls` table's `owner_id` column
-exists but nothing populates or enforces it yet (deferred to a future multi-tenancy phase), so
-any caller holding the key can manage any link. `GET /links` is an unscoped full-table scan
-over Scylla's native paging state (`CassandraPageRequest`, base64-encoded as `pageToken`) —
-honest "every link in the system", not "my links"; a real per-owner listing needs a
-query-first secondary table keyed by `owner_id` before it can narrow. Update/delete evict only
+its own previously-shortened links, gated by the same `X-API-Key` filter as `/v1/shorten` — see
+`ApiKeySecurityConfig`. Every endpoint is scoped to the owner id that filter resolved from the
+key (see "API keys"): `urls.owner_id` is stamped on creation, and another owner's link answers
+`404`, never `403`, so one owner cannot probe which short keys another holds. `GET /v1/links`
+still scans the whole table, now with `ALLOW FILTERING` on `owner_id`, so it costs the table,
+not the owner; narrowing that needs a query-first secondary table keyed by `owner_id`.
+Update/delete evict only
 `shortener-service`'s own Redis cache entry; the resolver runs an independently-namespaced Redis
 cache (see Observability/Resilience sections' Boot 4 traps — same pattern applies to cache
 naming) and can keep serving a stale mapping for up to its 12h TTL after an update/delete.
 
 ## API keys
 
-`POST /shorten` requires an `X-API-Key` header; the resolver's redirect path is deliberately
+`POST /v1/shorten` requires an `X-API-Key` header; the resolver's redirect path is deliberately
 public and must stay that way. Validation lives in `shortener-service`'s `security` package: the
-filter is registered against the `/shorten` URL pattern only (a bare `@Component` filter would map
-to `/*` and break actuator probes). Only SHA-256 digests of accepted keys are configured
-(`shortener.api-key.hashes` / `SHORTENER_API_KEY_HASHES`), which is why they live in non-secret
-config (`.env`, the chart's ConfigMap) rather than `.env.secrets` — a digest cannot be replayed.
-Local development key: `hopr-local-dev-key`.
+filter is registered against the `/v1/shorten` and `/v1/links` URL patterns only (a bare
+`@Component` filter would map to `/*` and break actuator probes). Configuration is
+`<sha-256 digest>:<owner-id>` pairs (`shortener.api-key.owners` / `SHORTENER_API_KEY_OWNERS`):
+digests only, which is why they live in non-secret config (`.env`, the chart's ConfigMap) rather
+than `.env.secrets` — a digest cannot be replayed. The filter publishes the matched owner id as
+the `ApiKeyFilter.OWNER_ID_ATTRIBUTE` request attribute, which the controllers take as a
+`@RequestAttribute` and pass down; that attribute is the only source of owner identity, never the
+request body. Local development keys: `hopr-local-dev-key` (owner `local-dev`) and
+`hopr-local-dev-key-2` (owner `local-dev-2`) — two of them so the per-owner scoping is
+demonstrable locally.
+
+## API versioning
+
+`shortener-service`'s routes live under a `/v1` URL path prefix; the old unversioned paths were
+removed outright rather than aliased or redirected (the only client is this repo's frontend).
+`resolver-service`'s redirect (`GET /{shortKey}`) is deliberately NOT versioned — an issued short
+link has to keep resolving forever, so it must not embed an API version that could be retired.
+Adding `/v2` means a second controller (or `@RequestMapping`) beside `/v1`, plus the gateway
+(`api-gateway/nginx.conf`) and ingress (`k8s/hopr-chart/templates/ingress.yaml`), which route the
+whole `/v1` prefix in one rule each.
 
 ## Local config and secrets
 

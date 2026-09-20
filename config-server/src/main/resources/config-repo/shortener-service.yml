@@ -39,10 +39,11 @@ spring:
 shortener:
   domain: ${SHORTENER_DOMAIN}
   api-key:
-    # SHA-256 digests of the keys accepted on /shorten, comma separated. Only digests are
-    # configured: the plaintext keys live with the clients, so this value -- and anything
-    # that logs or leaks it -- is useless to an attacker.
-    hashes: ${SHORTENER_API_KEY_HASHES}
+    # `<sha-256 digest>:<owner-id>` pairs, comma separated: which keys are accepted on
+    # /v1/shorten and /v1/links, and whose links each one manages. Only digests are configured:
+    # the plaintext keys live with the clients, so this value -- and anything that logs or leaks
+    # it -- is useless to an attacker.
+    owners: ${SHORTENER_API_KEY_OWNERS}
 
 keygen:
   service:

@@ -29,6 +29,11 @@ import java.net.URI;
  * This controller maps incoming requests to the resolver use case, which resolves short keys to long URLs.
  * It returns a 307 redirect response with the resolved long URL.
  *
+ * <p>Deliberately NOT versioned, unlike shortener-service's {@code /v1/...} write and management
+ * routes: a short link is a URL handed to the world and printed on things, so it has to keep
+ * resolving forever. Embedding an API version in it would mean every issued link carries the
+ * version it happened to be created under, and retiring a version would break links rather than
+ * clients. A future change of redirect semantics has to be backwards compatible here instead.
  */
 @RestController
 @RequestMapping("/")

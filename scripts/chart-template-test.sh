@@ -56,3 +56,17 @@ for svc in shortener-service resolver-service; do
 
   echo "ok: $svc PodDisruptionBudget + topologySpreadConstraints"
 done
+
+# The versioned API surface: every /v1 route has to reach shortener-service through the
+# ingress, and the API keys have to arrive as `<digest>:<owner-id>` pairs -- a chart that
+# still renders the old unversioned path or the old hash-only variable would deploy an API
+# nothing can reach with the keys nobody is scoped by.
+ingress=$(render -s templates/ingress.yaml)
+grep -q 'path: /v1$' <<<"$ingress" || fail "ingress does not route /v1 to the API"
+if grep -q 'path: /shorten$' <<<"$ingress"; then fail "ingress still routes the removed unversioned /shorten"; fi
+
+configmap=$(render -s templates/configmap.yaml --set config.shortenerApiKeyOwners=abc123:owner-a)
+grep -q 'SHORTENER_API_KEY_OWNERS: "abc123:owner-a"' <<<"$configmap" \
+  || fail "ConfigMap does not carry the key-to-owner pairs: $configmap"
+
+echo "ok: ingress /v1 routing + SHORTENER_API_KEY_OWNERS ConfigMap entry"

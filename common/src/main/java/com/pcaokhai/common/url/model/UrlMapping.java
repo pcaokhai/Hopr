@@ -52,6 +52,12 @@ public class UrlMapping implements Serializable {
     @Column("expires_at")
     private Instant expiresAt;
 
+    // The owner the API key that created this link maps to (see shortener-service's
+    // ApiKeyFilter). Not part of the @PersistenceCreator constructor -- Spring Data populates
+    // it through the accessors below -- so the existing constructors stay as they are.
+    @Column("owner_id")
+    private String ownerId;
+
     @Column("created_at")
     private Instant createdAt;
 
@@ -94,6 +100,8 @@ public class UrlMapping implements Serializable {
 
     public String getStatus() {return status;}
 
+    public String getOwnerId() {return ownerId;}
+
     public void setShortKey(String shortKey) {
         this.shortKey = shortKey;
     }
@@ -108,17 +116,20 @@ public class UrlMapping implements Serializable {
 
     public void setStatus(String status) {this.status = status;}
 
+    public void setOwnerId(String ownerId) {this.ownerId = ownerId;}
+
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
         UrlMapping that = (UrlMapping) o;
         return Objects.equals(shortKey, that.shortKey) && Objects.equals(longUrl, that.longUrl)
                 && Objects.equals(alias, that.alias) && Objects.equals(expiresAt, that.expiresAt)
-                && Objects.equals(createdAt, that.createdAt) && Objects.equals(status, that.status);
+                && Objects.equals(createdAt, that.createdAt) && Objects.equals(status, that.status)
+                && Objects.equals(ownerId, that.ownerId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(shortKey, longUrl, alias, expiresAt, createdAt, status);
+        return Objects.hash(shortKey, longUrl, alias, expiresAt, createdAt, status, ownerId);
     }
 }

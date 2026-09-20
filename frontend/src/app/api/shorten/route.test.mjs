@@ -40,7 +40,7 @@ test("attaches the server-only API key to the upstream request", async () => {
   const res = await post({ longUrl: "https://example.com" });
 
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, "http://gateway.test/shorten");
+  assert.equal(calls[0].url, "http://gateway.test/v1/shorten");
   assert.equal(new Headers(calls[0].init.headers).get("X-API-Key"), "test-server-key");
   assert.deepEqual(JSON.parse(calls[0].init.body), { longUrl: "https://example.com" });
   assert.equal(res.status, 201);

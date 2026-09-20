@@ -38,8 +38,11 @@ spring:
 shortener:
   domain: http://localhost:80/
   api-key:
-    # SHA-256 of the literal `test-api-key` used by the API key tests.
-    hashes: 4c806362b613f7496abf284146efd31da90e4b16169fe001841ca17290f427c4
+    # SHA-256 digests of the literals `test-api-key` and `test-api-key-2`, mapped to two
+    # distinct owners so the tests can prove one owner's links are invisible to the other.
+    owners: >-
+      4c806362b613f7496abf284146efd31da90e4b16169fe001841ca17290f427c4:owner-a,
+      c6029e4ce1e44050a0b8f478634ee3b12bee28fb58d1e142249309f8f8d73163:owner-b
 
 keygen:
   service:

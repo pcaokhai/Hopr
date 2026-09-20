@@ -26,7 +26,7 @@ kind cluster "hopr"
          └─ Deployment/Service: frontend               (port 3000)
      └─ ingress-nginx (installed separately via upstream manifest)
          ├─ Ingress: hopr-ingress — /, /dashboard and /api to the frontend,
-         │           /shorten to shortener-service, short keys to
+         │           /v1/shorten to shortener-service, short keys to
          │           resolver-service, everything else to shortener-service
          └─ Ingress: hopr-static-ingress — /_next/ and root-level static assets
                      to the frontend, outside the rate limit
@@ -172,13 +172,13 @@ This will, in order:
    **8888** and 8443 → **8443**, and labels the node `ingress-ready=true` for
    `ingress-nginx`).
 2. Create the `hopr` namespace, and mint a local development API key for
-   `POST /shorten` into the gitignored `k8s/.dev-api-key` if it does not exist
+   `POST /v1/shorten` into the gitignored `k8s/.dev-api-key` if it does not exist
    yet, plus a self-signed TLS certificate into `k8s/.dev-tls.crt`/`.dev-tls.key`
    (both reused on re-runs, so a redeploy never invalidates the key or cert
    already in the cluster — see "TLS" below). Both Helm invocations below get them via
-   `--set shortenApiKey=<key> --set config.shortenerApiKeyHashes=<sha256>`.
+   `--set shortenApiKey=<key> --set config.shortenerApiKeyOwners=<sha256>:<owner-id>`.
    The chart's own defaults stay empty on purpose — `shortener-service`
-   refuses to start on an empty hash list, so nothing deploys with a key
+   refuses to start on an empty key list, so nothing deploys with a key
    published in this repo. For anything beyond local development, pass your
    own key and its digest on those two `--set` flags instead:
    `KEY=$(openssl rand -hex 32); printf %s "$KEY" | shasum -a 256`.
@@ -356,13 +356,13 @@ Expected: each prints JSON with `"status":"UP"` — `shortener-service` and
 ### 3. End-to-end: shorten a URL through the gateway
 
 ```bash
-curl -sk -X POST https://localhost:8443/shorten \
+curl -sk -X POST https://localhost:8443/v1/shorten \
   -H "X-API-Key: $(cat k8s/.dev-api-key)" \
   -H 'Content-Type: application/json' \
   -d '{"longUrl":"https://example.com"}'
 ```
 
-`POST /shorten` rejects a request without a valid `X-API-Key` with `401`; the key is
+`POST /v1/shorten` rejects a request without a valid `X-API-Key` with `401`; the key is
 the one `deploy.sh` minted into `k8s/.dev-api-key`. Redirects stay public.
 
 **Important:** the request body field is `longUrl`, not `url` — this is

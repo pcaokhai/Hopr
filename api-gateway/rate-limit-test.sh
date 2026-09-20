@@ -67,14 +67,14 @@ other=$(call 192.168.210.51 /api/shorten -X POST -d '{}')
 [[ "$other" == frontend* ]] || fail "/api/shorten did not reach the frontend: $other"
 
 # The pre-existing routes still win, and the flood did not spend their budget.
-for check in "192.168.210.52 /shorten shortener-service -XPOST" "192.168.210.53 /abcd resolver-service" "192.168.210.54 / frontend" "192.168.210.55 /dashboard frontend"; do
+for check in "192.168.210.52 /v1/shorten shortener-service -XPOST" "192.168.210.53 /abcd resolver-service" "192.168.210.54 / frontend" "192.168.210.55 /dashboard frontend"; do
   read -r ip path expected extra <<<"$check"
   got=$(call "$ip" "$path" ${extra:+$extra})
   [[ "$got" == "$expected"* ]] || fail "$path reached '$got', expected $expected"
 done
 
 # A normal page load is one HTML request plus a burst of static assets from one address.
-# None of it may be rejected, while the same address must still be limited on /shorten.
+# None of it may be rejected, while the same address must still be limited on /v1/shorten.
 page=192.168.210.56
 burst=$(docker run --rm --network "$NET" --ip "$page" curlimages/curl:latest \
   sh -c 'curl -sk -o /dev/null -w "%{http_code}\n" https://'"$GATEWAY"'/; for i in $(seq 1 30); do curl -sk -o /dev/null -w "%{http_code}\n" https://'"$GATEWAY"'/_next/static/chunks/main-$i.js; done; curl -sk -o /dev/null -w "%{http_code}\n" https://'"$GATEWAY"'/favicon.ico')
@@ -84,8 +84,8 @@ asset=$(call "$page" /favicon.ico)
 [[ "$asset" == frontend* ]] || fail "/favicon.ico did not reach the frontend: $asset"
 
 write_statuses=$(docker run --rm --network "$NET" --ip "$page" curlimages/curl:latest \
-  sh -c 'for i in $(seq 1 25); do curl -sk -o /dev/null -w "%{http_code}\n" -X POST https://'"$GATEWAY"'/shorten -d "{}"; done')
-grep -q 429 <<<"$write_statuses" || fail "/shorten was not rate limited after the page load: $(tr '\n' ' ' <<<"$write_statuses")"
+  sh -c 'for i in $(seq 1 25); do curl -sk -o /dev/null -w "%{http_code}\n" -X POST https://'"$GATEWAY"'/v1/shorten -d "{}"; done')
+grep -q 429 <<<"$write_statuses" || fail "/v1/shorten was not rate limited after the page load: $(tr '\n' ' ' <<<"$write_statuses")"
 
 # The exemption covers only what the frontend serves: a crafted asset-looking path that falls
 # through to shortener-service must still spend the write-path budget.
@@ -98,7 +98,7 @@ grep -q 429 <<<"$crafted" || fail "a non-frontend .js path dodged the rate limit
 # a page path and on the write path that carries the API key header. The target is the
 # server block's primary name, so any plaintext host (including http://localhost/) lands
 # on https://hopr.localhost/ rather than being echoed back.
-for path in / /shorten /dashboard /abcd; do
+for path in / /v1/shorten /dashboard /abcd; do
   plain=$(docker run --rm --network "$NET" --ip 192.168.210.58 curlimages/curl:latest \
     -s -o /dev/null -w '%{http_code} %{redirect_url}' "http://$GATEWAY$path")
   [[ "$plain" == 301* ]] || fail "http://$path was not redirected: $plain"
@@ -110,10 +110,10 @@ body=$(docker run --rm --network "$NET" --ip 192.168.210.59 curlimages/curl:late
   -s "http://$GATEWAY/")
 [[ "$body" != *frontend* && "$body" != *shortener-service* ]] || fail "plain HTTP served an upstream response: $body"
 
-# Every HTTPS response carries the security headers, including POST /shorten -- the route
+# Every HTTPS response carries the security headers, including POST /v1/shorten -- the route
 # that carries the API key and sets its own CORS add_header, which in nginx would otherwise
 # discard the inherited ones.
-for probe in "192.168.210.60 / -I" "192.168.210.61 /shorten -D- -o/dev/null -XPOST -d{}"; do
+for probe in "192.168.210.60 / -I" "192.168.210.61 /v1/shorten -D- -o/dev/null -XPOST -d{}"; do
   read -r ip path extra1 extra2 extra3 extra4 <<<"$probe"
   headers=$(docker run --rm --network "$NET" --ip "$ip" curlimages/curl:latest \
     -sk $extra1 $extra2 $extra3 $extra4 "https://$GATEWAY$path" | tr -d '\r')
@@ -125,5 +125,5 @@ done
 
 echo "plain HTTP 301s to HTTPS on every route and serves no upstream body; HSTS present"
 echo "rate limited $rejected of 25 requests from one address; other addresses and all routes still served"
-echo "a 32-request page load from one address was not rate limited; /shorten and /evil.js from one address still were"
+echo "a 32-request page load from one address was not rate limited; /v1/shorten and /evil.js from one address still were"
 echo "PASS"

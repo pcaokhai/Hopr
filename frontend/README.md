@@ -36,7 +36,7 @@ links point at `https://hopr.localhost`, not the Next.js dev server.
 ## What's real vs. mocked
 
 **Real, wired to the backend:**
-- Landing page shorten form (`POST /shorten`) — long URL + optional custom
+- Landing page shorten form (`POST /v1/shorten`) — long URL + optional custom
   slug, returns a real short link with copy-to-clipboard and a client-side
   QR code.
 
@@ -44,7 +44,7 @@ links point at `https://hopr.localhost`, not the Next.js dev server.
 - `/dashboard` — link list, search, "Create link" modal. Backed by a Zustand
   store seeded with fake links (`src/lib/mock-data.ts`,
   `src/lib/dashboard-store.ts`). `shortener-service` now exposes
-  `GET/PATCH/DELETE /links` (see the root `AGENTS.md`'s "Link management"
+  `GET/PATCH/DELETE /v1/links` (see the root `AGENTS.md`'s "Link management"
   section) but this UI hasn't been switched over to it.
 - `/dashboard/[slug]` — clicks-over-time chart, top countries/devices/referrers.
   All fabricated per-slug in `mockAnalyticsFor`; there is still no analytics
@@ -54,7 +54,7 @@ links point at `https://hopr.localhost`, not the Next.js dev server.
   Every mocked screen carries a "Demo data · not wired to backend" badge
   (`src/components/mock-badge.tsx`).
 
-Wire the dashboard list/detail views up to `/links` and add analytics/auth
+Wire the dashboard list/detail views up to `/v1/links` and add analytics/auth
 endpoints before removing the mock badge.
 
 ## Tests

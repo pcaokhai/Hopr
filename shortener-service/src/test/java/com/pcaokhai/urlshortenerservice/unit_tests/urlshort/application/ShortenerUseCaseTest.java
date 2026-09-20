@@ -42,7 +42,7 @@ public class ShortenerUseCaseTest {
         ShortenRequest req = new ShortenRequest(longUrl, alias);
         when(domainProperties.toString()).thenReturn("https://short.ly/");
         when(dbCacheSaver.saveUrlMappingIfAbsent(any(), any())).thenReturn(true);
-        ShortenResponse resp = useCase.shorten(req);
+        ShortenResponse resp = useCase.shorten(req, "owner-a");
         assertEquals("https://short.ly/" + alias, resp.shortUrl());
         verify(aliasValidation).validate(alias);
         verifyNoInteractions(keyGenResolver);
@@ -61,7 +61,7 @@ public class ShortenerUseCaseTest {
         String alias = "taken";
         ShortenRequest req = new ShortenRequest("https://example.com", alias);
         when(dbCacheSaver.saveUrlMappingIfAbsent(any(), any())).thenReturn(false);
-        assertThrows(AliasNotAvailableException.class, () -> useCase.shorten(req));
+        assertThrows(AliasNotAvailableException.class, () -> useCase.shorten(req, "owner-a"));
         verify(dbCacheSaver).saveUrlMappingIfAbsent(any(), any());
         verifyNoInteractions(keyGenResolver);
     }
@@ -72,7 +72,7 @@ public class ShortenerUseCaseTest {
         ShortenRequest req = new ShortenRequest("https://x.com", alias);
         doThrow(new IllegalArgumentException("Invalid"))
                 .when(aliasValidation).validate(alias);
-        assertThrows(IllegalArgumentException.class, () -> useCase.shorten(req));
+        assertThrows(IllegalArgumentException.class, () -> useCase.shorten(req, "owner-a"));
         verify(aliasValidation).validate(alias);
         verifyNoInteractions(keyGenResolver);
         verifyNoInteractions(dbCacheSaver);
@@ -85,7 +85,7 @@ public class ShortenerUseCaseTest {
         when(keyGenResolver.resolveShortKey()).thenReturn(generated);
         when(domainProperties.toString()).thenReturn("https://short.ly/");
         when(dbCacheSaver.saveUrlMappingIfAbsent(any(), any())).thenReturn(true);
-        ShortenResponse resp = useCase.shorten(req);
+        ShortenResponse resp = useCase.shorten(req, "owner-a");
         assertEquals("https://short.ly/" + generated, resp.shortUrl());
         verify(aliasValidation).validate(null);
         verify(dbCacheSaver).saveUrlMappingIfAbsent(
@@ -104,7 +104,7 @@ public class ShortenerUseCaseTest {
         when(keyGenResolver.resolveShortKey()).thenReturn("taken", "free");
         when(domainProperties.toString()).thenReturn("https://short.ly/");
         when(dbCacheSaver.saveUrlMappingIfAbsent(any(), any())).thenReturn(false, true);
-        assertEquals("https://short.ly/free", useCase.shorten(req).shortUrl());
+        assertEquals("https://short.ly/free", useCase.shorten(req, "owner-a").shortUrl());
         verify(keyGenResolver, times(2)).resolveShortKey();
     }
 
@@ -116,7 +116,7 @@ public class ShortenerUseCaseTest {
         when(domainProperties.toString()).thenReturn("https://short.ly/");
         when(dbCacheSaver.saveUrlMappingIfAbsent(any(), any())).thenReturn(true);
 
-        useCase.shorten(req);
+        useCase.shorten(req, "owner-a");
 
         verify(dbCacheSaver).saveUrlMappingIfAbsent(
                 argThat(mapping -> mapping.getExpiresAt() != null
@@ -130,7 +130,7 @@ public class ShortenerUseCaseTest {
         ShortenRequest req = new ShortenRequest("https://foo.com", null);
         when(keyGenResolver.resolveShortKey()).thenReturn("taken");
         when(dbCacheSaver.saveUrlMappingIfAbsent(any(), any())).thenReturn(false);
-        assertThrows(IllegalStateException.class, () -> useCase.shorten(req));
+        assertThrows(IllegalStateException.class, () -> useCase.shorten(req, "owner-a"));
         verify(dbCacheSaver, times(5)).saveUrlMappingIfAbsent(any(), any());
     }
 

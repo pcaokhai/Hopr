@@ -49,9 +49,9 @@ public class ShortenerUseCase {
 
     private static final int MAX_GENERATED_KEY_ATTEMPTS = 5;
 
-    public ShortenResponse shorten(ShortenRequest request) {
+    public ShortenResponse shorten(ShortenRequest request, String ownerId) {
         validateAlias(request.alias());
-        String shortKey = claimShortKey(request);
+        String shortKey = claimShortKey(request, ownerId);
         return buildShortUrl(shortKey);
     }
 
@@ -64,17 +64,17 @@ public class ShortenerUseCase {
     // a preceding existence check could only ever narrow the race window, never close it.
     // A losing alias is the caller's problem (409); a losing generated key is an internal
     // collision the caller cannot influence, so we simply ask keygen for another one.
-    private String claimShortKey(ShortenRequest request) {
+    private String claimShortKey(ShortenRequest request, String ownerId) {
         String alias = request.alias();
         if (StringUtils.hasText(alias)) {
-            if (!dbCacheSaver.saveUrlMappingIfAbsent(buildMapping(alias, request), request.expiresInSeconds())) {
+            if (!dbCacheSaver.saveUrlMappingIfAbsent(buildMapping(alias, request, ownerId), request.expiresInSeconds())) {
                 throw new AliasNotAvailableException("Alias " + alias + " is not available");
             }
             return alias;
         }
         for (int attempt = 0; attempt < MAX_GENERATED_KEY_ATTEMPTS; attempt++) {
             String shortKey = keyGenResolver.resolveShortKey();
-            if (dbCacheSaver.saveUrlMappingIfAbsent(buildMapping(shortKey, request), request.expiresInSeconds())) {
+            if (dbCacheSaver.saveUrlMappingIfAbsent(buildMapping(shortKey, request, ownerId), request.expiresInSeconds())) {
                 return shortKey;
             }
         }
@@ -84,11 +84,16 @@ public class ShortenerUseCase {
 
     static final String STATUS_ACTIVE = "ACTIVE";
 
-    private UrlMapping buildMapping(String shortKey, ShortenRequest request) {
+    private UrlMapping buildMapping(String shortKey, ShortenRequest request, String ownerId) {
         Instant expiresAt = request.expiresInSeconds() == null
                 ? null
                 : Instant.now().plusSeconds(request.expiresInSeconds());
-        return new UrlMapping(shortKey, request.longUrl(), request.alias(), expiresAt, Instant.now(), STATUS_ACTIVE);
+        UrlMapping mapping =
+                new UrlMapping(shortKey, request.longUrl(), request.alias(), expiresAt, Instant.now(), STATUS_ACTIVE);
+        // Stamped from the authenticated caller's API key, never from the request body: an owner
+        // a client could name is an owner a client could impersonate.
+        mapping.setOwnerId(ownerId);
+        return mapping;
     }
 
     private ShortenResponse buildShortUrl(String shortKey) {
