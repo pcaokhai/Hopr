@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Asserts that `helm template` renders the disruption/scheduling resources the chart is
-# supposed to produce: a PodDisruptionBudget per request-serving Deployment, and
-# zone-keyed topologySpreadConstraints on those Deployments' pod specs.
+# supposed to produce: a PodDisruptionBudget per request-serving workload, zone-keyed
+# topologySpreadConstraints on those workloads' pod specs, and the canary Rollouts
+# (plus their HPA scaleTargetRefs) those two services are deployed as.
 #
 # This checks CONFIGURATION ONLY. It cannot and does not test runtime behaviour: whether
 # the eviction API actually honours the budget during a node drain, or whether the
@@ -70,3 +71,31 @@ grep -q 'SHORTENER_API_KEY_OWNERS: "abc123:owner-a"' <<<"$configmap" \
   || fail "ConfigMap does not carry the key-to-owner pairs: $configmap"
 
 echo "ok: ingress /v1 routing + SHORTENER_API_KEY_OWNERS ConfigMap entry"
+
+# The progressive-delivery surface: both hot-path services must render as Argo Rollouts with
+# the canary steps, and their HPAs must target the Rollout. An HPA left pointing at
+# `kind: Deployment` would silently scale nothing once the Deployment is gone.
+for svc in shortener-service resolver-service; do
+  # helm sorts rendered documents by kind, so select the document by kind, not by position.
+  rollout=$(render -s "templates/$svc.yaml" | doc "kind: Rollout")
+  [ -n "$rollout" ] || fail "$svc does not render a Rollout"
+  grep -q "name: $svc$" <<<"$rollout" || fail "Rollout is not named $svc"
+  canary=$(printf '%s' "$rollout" | block 'canary:')
+  # Surge-first: a canary step must never take a stable replica down before its
+  # replacement is Ready, at any replica count the HPA has scaled to.
+  expect "$svc canary maxUnavailable" "$(printf '%s' "$canary" | value maxUnavailable)" "0"
+  # The schedule is an ordered sequence, not a set: a `setWeight: 100` first would render a
+  # meaningless canary while still containing every string below.
+  steps=$(printf '%s' "$rollout" | block 'steps:' | sed '1d;s/[ -]*//g' | paste -sd, -)
+  expect "$svc canary steps" "$steps" \
+    "setWeight:20,pause:,duration:60s,setWeight:50,pause:,duration:60s,setWeight:100"
+  if render -s "templates/$svc.yaml" | grep -q 'kind: Deployment'; then
+    fail "$svc still renders a Deployment"
+  fi
+
+  hpa=$(render -s templates/hpa.yaml | doc "name: $svc\n")
+  expect "HPA/$svc scaleTargetRef kind" \
+    "$(printf '%s' "$hpa" | block 'scaleTargetRef:' | value kind)" "Rollout"
+
+  echo "ok: $svc Rollout canary steps + HPA scaleTargetRef"
+done

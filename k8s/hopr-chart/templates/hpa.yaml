@@ -10,9 +10,11 @@ metadata:
   name: shortener-service
   namespace: {{ .Values.namespace }}
 spec:
+  # Must target the Rollout, not a Deployment: the Rollout owns the ReplicaSets now, and an
+  # HPA pointed at a Deployment name that no longer exists silently scales nothing.
   scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
     name: shortener-service
   minReplicas: {{ .Values.shortenerService.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.shortenerService.autoscaling.maxReplicas }}
@@ -32,9 +34,11 @@ metadata:
   name: resolver-service
   namespace: {{ .Values.namespace }}
 spec:
+  # Must target the Rollout, not a Deployment: the Rollout owns the ReplicaSets now, and an
+  # HPA pointed at a Deployment name that no longer exists silently scales nothing.
   scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
     name: resolver-service
   minReplicas: {{ .Values.resolverService.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.resolverService.autoscaling.maxReplicas }}

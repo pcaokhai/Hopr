@@ -21,8 +21,8 @@ kind cluster "hopr"
          ├─ StatefulSet/Service: hopr-scylladb       (scylladb/scylla:6.2, 3 nodes)
          ├─ Deployment/Service: config-server         (port 8888)
          ├─ Deployment/Service: keygen-service        (port 8081)
-         ├─ Deployment/Service: shortener-service     (port 8080)
-         ├─ Deployment/Service: resolver-service       (port 8083)
+         ├─ Rollout/Service:    shortener-service     (port 8080)  (canary)
+         ├─ Rollout/Service:    resolver-service      (port 8083)  (canary)
          └─ Deployment/Service: frontend               (port 3000)
      └─ ingress-nginx (installed separately via upstream manifest)
          ├─ Ingress: hopr-ingress — /, /dashboard and /api to the frontend,
@@ -48,8 +48,8 @@ and `k8s/hopr-chart/templates/ingress.yaml` defines a native Kubernetes
 k8s/
   kind-config.yaml          kind cluster definition (1 node, port mapping)
   build-and-load.sh         builds jars + docker images, loads them into kind
-  deploy.sh                 full deploy: cluster, Redis, dev API key + TLS cert,
-                            app chart, rollout wait
+  deploy.sh                 full deploy: cluster, Redis, Argo Rollouts, dev API key +
+                            TLS cert, app chart, rollout wait
   hopr-chart/                Helm chart for ScyllaDB + the 4 app services + frontend + Ingress
   autoscaling-test.sh        drives load against shortener/resolver to confirm resource
                             requests are set and the HPAs scale replicas up under load
@@ -65,8 +65,8 @@ k8s/
       scylladb.yaml           ScyllaDB StatefulSet + headless Service
       config-server.yaml      Config Server Deployment + Service (port 8888)
       keygen-service.yaml     keygen-service Deployment + Service
-      shortener-service.yaml  shortener-service Deployment + Service
-      resolver-service.yaml   resolver-service Deployment + Service
+      shortener-service.yaml  shortener-service Rollout (canary) + Service
+      resolver-service.yaml   resolver-service Rollout (canary) + Service
       frontend.yaml           Next.js frontend Deployment + Service (port 3000)
       ingress.yaml            Ingress resource routing to shortener-service /
                               resolver-service / frontend via the ingress-nginx
@@ -200,7 +200,8 @@ This will, in order:
    `shortener-service` and `resolver-service` open a session against the `hopr`
    keyspace at boot, which is why they are not created until this has run.
 8. `helm upgrade --install hopr ./k8s/hopr-chart` — adds (or upgrades) the two URL services.
-9. Wait for every Deployment's rollout to finish.
+9. Wait for every workload's rollout to finish (the two Rollouts via their
+   `Healthy` phase, since `kubectl rollout status` cannot read a Rollout).
 
 The script uses `set -euo pipefail` and is **idempotent** — re-running it on
 an already-deployed cluster is safe (`helm upgrade --install` and
@@ -210,9 +211,14 @@ an already-deployed cluster is safe (`helm upgrade --install` and
 
 ```bash
 ./k8s/build-and-load.sh
-kubectl rollout restart deployment/config-server deployment/keygen-service \
-  deployment/shortener-service deployment/resolver-service -n hopr
+kubectl rollout restart deployment/config-server deployment/keygen-service -n hopr
+kubectl argo rollouts restart shortener-service resolver-service -n hopr
 ```
+
+`shortener-service` and `resolver-service` are Argo Rollouts, not Deployments, so
+`kubectl rollout restart deployment/...` cannot address them; see "Progressive
+delivery" below. (A restart re-creates pods against the same pod template, so it
+does not run the canary steps — only a template/image change does.)
 
 `build-and-load.sh` alone does not restart running pods — since
 `imagePullPolicy: Never` and the image tag stays `local`, Kubernetes won't
@@ -271,7 +277,7 @@ update `config.shortenerDomain` in `k8s/hopr-chart/values.yaml` to match.
 
 ### Resource requests/limits and autoscaling
 
-Every backend Deployment's `replicaCount` and `resources.requests`/`limits` are parameterized
+Every backend workload's `replicaCount` and `resources.requests`/`limits` are parameterized
 in `k8s/hopr-chart/values.yaml`, whose comments explain the starter numbers, the JVM
 container-awareness caveat, and why the scheduler/HPA need requests specifically. `shortener-service`
 and `resolver-service` also get a `HorizontalPodAutoscaler` (`templates/hpa.yaml`, CPU-utilization
@@ -281,7 +287,7 @@ against a running cluster with `k8s/autoscaling-test.sh`.
 ### Disruption budgets and zone spreading (not verifiable locally)
 
 `templates/pdb.yaml` gives `shortener-service` and `resolver-service` a
-`PodDisruptionBudget` with `maxUnavailable: 1`, and both Deployments carry a
+`PodDisruptionBudget` with `maxUnavailable: 1`, and both workloads carry a
 `topologySpreadConstraints` entry keyed on `topology.kubernetes.io/zone`
 (`maxSkew: 1`, `whenUnsatisfiable: ScheduleAnyway`), rendered from
 `templates/_helpers.tpl` and tunable under `topologySpread` /
@@ -320,6 +326,101 @@ values file on such a cluster should also reconsider
 single-node local cluster can schedule at all; `DoNotSchedule` is the stricter
 and generally correct production setting.
 
+### Progressive delivery (canary rollouts)
+
+`shortener-service` and `resolver-service` are Argo Rollouts
+(`argoproj.io/v1alpha1`) rather than Deployments. `k8s/deploy.sh` installs the
+Argo Rollouts controller (pinned `v1.7.2`) into an `argo-rollouts` namespace the
+same way it installs ingress-nginx, and the CRDs must exist before the chart is
+installed or those two services render resources the cluster does not understand.
+Everything else in the chart is still a plain Deployment: `config-server` and
+`keygen-service` serve no user traffic (a canary has nothing to measure itself
+against there — keygen is called only by shortener, config-server only at pod
+boot), and the frontend/infrastructure workloads are likewise out of scope.
+
+The canary schedule lives in `values.yaml` under `canary.steps`, shared by both
+services:
+
+```yaml
+- setWeight: 20
+- pause: {duration: 60s}
+- setWeight: 50
+- pause: {duration: 60s}
+- setWeight: 100
+```
+
+Two deliberate limitations, both documented in
+`templates/shortener-service.yaml`:
+
+- **Replica-ratio traffic splitting, not true weighting.** With no service mesh
+  and no `trafficRouting` configured, `setWeight: 20` means "run about 20% of the
+  pods on the new ReplicaSet behind the same Service" — at the HPA's baseline of
+  1 replica the first step is really one new pod beside one old one. Per-request
+  weighting would need nginx-ingress canary annotations or a mesh.
+- **Timed pauses, not an automated analysis.** An `analysis:` step could gate
+  promotion on Phase 2's Prometheus metrics (error rate, p99 latency), but
+  nothing in this chart runs a Prometheus *server* for an `AnalysisTemplate` to
+  query — the services only expose `/actuator/prometheus`. Deploying one and
+  adding a `AnalysisTemplate` is the natural next step; timed pauses plus a human
+  watching are the honest version today. The pauses are timed rather than
+  indefinite so `deploy.sh` can run unattended.
+
+The HPAs (`templates/hpa.yaml`) target `kind: Rollout`, which Argo Rollouts
+requires — an HPA left pointing at the now-nonexistent Deployment would silently
+scale nothing. The PodDisruptionBudgets select on the `app` label and so keep
+working unchanged, as do Phase 3's non-root images and secret wiring, which live
+in the pod template the Rollout carries verbatim.
+
+**Driving and observing one locally.** The plugin is optional but much the
+nicest view (`brew install argoproj/tap/kubectl-argo-rollouts`):
+
+```bash
+# Change something, rebuild, and watch the canary progress step by step:
+./k8s/build-and-load.sh
+kubectl argo rollouts get rollout shortener-service -n hopr --watch
+
+# Without the plugin:
+kubectl get rollout shortener-service -n hopr \
+  -o jsonpath='{.status.phase}/{.status.currentStepIndex}{"\n"}'
+
+kubectl argo rollouts promote shortener-service -n hopr   # skip the current pause
+kubectl argo rollouts abort   shortener-service -n hopr   # roll back to the stable version
+kubectl argo rollouts undo    shortener-service -n hopr   # revert the pod template
+```
+
+Note that Argo Rollouts **skips the canary steps on the very first rollout** —
+there is no previous version to canary against — so a fresh `deploy.sh` comes up
+at full replicas immediately and the steps only run on subsequent changes.
+
+**One-time cutover warning.** On a cluster that already runs this chart from
+before this change, the first `helm upgrade` that introduces these Rollouts
+takes `shortener-service` and `resolver-service` fully down for a cold Spring
+Boot start: Helm deletes the old `Deployment` (and with it every running pod)
+because the resource kind changed, the Rollout is then created from scratch, and
+per the paragraph above an initial rollout skips the canary entirely. This is
+expected, happens exactly once, and is not steady-state behaviour — every
+subsequent image change goes through the canary schedule with no capacity loss
+(`maxUnavailable: 0`). Adopting the existing ReplicaSet in place (`workloadRef`,
+or the `kubectl argo rollouts` migration path) would avoid it and is deliberately
+not done here: it is a lot of machinery for a single historical moment.
+
+**What was actually verified locally, and what wasn't.** Unlike the PDB/zone work
+below, the canary mechanics *are* fully demonstrable on this single-node `kind`
+cluster: step progression, pausing, weighting and abort are controller-side
+decisions that do not depend on node count. This was confirmed here on the
+`kind-hopr` cluster with the exact `canary.steps` above (against a throwaway
+Rollout in a scratch namespace, so the running stack was untouched): the initial
+rollout went straight to `Healthy` at step 5; a pod-template change then paused
+at step 1 with 1 new pod beside 4 stable ones; `abort` moved it to `Degraded` and
+back to the stable ReplicaSet; and on resume it walked 20% → pause → 50% → pause
+→ 100% on its own. `scripts/chart-template-test.sh` asserts the chart renders
+those steps and the retargeted HPAs.
+
+What a single node still cannot show: whether 20% of *pods* approximates 20% of
+*traffic* (that needs enough replicas and real concurrent load for the
+distribution to mean anything), and what an automated analysis step would decide,
+which needs both a Prometheus server and traffic worth measuring.
+
 ### Tearing down
 
 ```bash
@@ -345,8 +446,8 @@ plus the `ingress-nginx-controller` pod in the `ingress-nginx` namespace.
 
 ```bash
 kubectl exec -n hopr deploy/keygen-service    -- curl -sf http://localhost:8081/actuator/health
-kubectl exec -n hopr deploy/shortener-service -- curl -sf http://localhost:8080/actuator/health
-kubectl exec -n hopr deploy/resolver-service  -- curl -sf http://localhost:8083/actuator/health
+kubectl exec -n hopr "$(kubectl get pod -n hopr -l app=shortener-service -o name | head -1)" -- curl -sf http://localhost:8080/actuator/health
+kubectl exec -n hopr "$(kubectl get pod -n hopr -l app=resolver-service -o name | head -1)" -- curl -sf http://localhost:8083/actuator/health
 ```
 
 Expected: each prints JSON with `"status":"UP"` — `shortener-service` and

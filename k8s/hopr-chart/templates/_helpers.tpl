@@ -1,5 +1,5 @@
 {{/*
-Zone-spreading constraints for a Deployment's pod spec. Call with the app label, e.g.
+Zone-spreading constraints for a workload's pod spec. Call with the app label, e.g.
   {{- include "hopr.topologySpreadConstraints" (dict "app" "resolver-service" "root" $) | nindent 6 }}
 
 topologySpreadConstraints rather than podAntiAffinity: anti-affinity can only express

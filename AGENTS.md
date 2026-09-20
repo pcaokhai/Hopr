@@ -202,12 +202,24 @@ hot redirect path, and it can be deployed and scaled independently of it.
 
 The chart's PodDisruptionBudgets (`k8s/hopr-chart/templates/pdb.yaml`) and zone
 `topologySpreadConstraints` (`templates/_helpers.tpl`) apply to `shortener-service` and
-`resolver-service` only -- the two Deployments an HPA can scale past one replica. Those
+`resolver-service` only -- the two workloads an HPA can scale past one replica. Those
 files carry the reasoning (why `maxUnavailable` against `minReplicas: 1`, why spread
 constraints over pod anti-affinity). The local `kind` cluster is single-node with no zone
 labels, so neither resource's runtime behaviour is observable here; `k8s/README.md`'s
 "Disruption budgets and zone spreading" section is the authoritative note on that limit
 and on what a real multi-zone cluster would change.
+
+## Progressive delivery
+
+`shortener-service` and `resolver-service` are Argo Rollouts (`argoproj.io/v1alpha1`), not
+Deployments: `kubectl rollout restart/status deployment/...` does not address them, their HPAs
+must keep `scaleTargetRef.kind: Rollout`, and `k8s/deploy.sh` must install the Argo Rollouts
+controller before the chart. The canary schedule is `canary.steps` in the chart's `values.yaml`;
+`k8s/hopr-chart/templates/shortener-service.yaml` carries the reasoning (replica-ratio rather
+than true traffic weighting, timed pauses rather than a Prometheus `AnalysisTemplate`), and
+`k8s/README.md`'s "Progressive delivery" section is the authoritative how-to-drive-it write-up
+plus what was and was not verified on the single-node kind cluster. Other services stay plain
+Deployments.
 
 ## Load testing
 

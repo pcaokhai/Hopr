@@ -124,6 +124,17 @@ fi
 
 kubectl -n ingress-nginx rollout status deployment/ingress-nginx-controller --timeout=180s
 
+# Argo Rollouts: a cluster-level controller (own namespace + CRDs), installed from the
+# upstream manifest exactly like ingress-nginx above. shortener-service and resolver-service
+# are Rollouts rather than Deployments, so without this controller their pods never appear.
+# Pinned, and applied only when absent so a re-run does not churn the CRDs.
+if ! kubectl get crd rollouts.argoproj.io >/dev/null 2>&1; then
+  kubectl create namespace argo-rollouts --dry-run=client -o yaml | kubectl apply -f -
+  kubectl apply -n argo-rollouts \
+    -f https://github.com/argoproj/argo-rollouts/releases/download/v1.7.2/install.yaml
+  kubectl -n argo-rollouts rollout status deployment/argo-rollouts --timeout=180s
+fi
+
 ./k8s/build-and-load.sh
 
 # shortener/resolver open a CqlSession against keyspace hopr at boot, so on a fresh
@@ -147,14 +158,24 @@ done
 ./gradlew :db-migration:migrateScylla -Pscylla.contactPoint=127.0.0.1:9042
 kill "$PF_PID" 2>/dev/null || true; trap - EXIT
 
+# On a cluster still running the pre-Rollout chart, this upgrade takes shortener-service and
+# resolver-service fully down once: the kind changed, so Helm deletes their Deployments (and
+# every pod) before the Rollouts are created, and an initial rollout skips the canary. That is
+# a one-time cutover, not steady-state -- see k8s/README.md's "Progressive delivery" section.
 helm upgrade --install hopr ./k8s/hopr-chart --namespace hopr \
   --set shortenApiKey="$SHORTEN_API_KEY" --set-string config.shortenerApiKeyOwners="${SHORTEN_API_KEY_OWNERS//,/\\,}" \
   --set-file tls.crt="$CRT_FILE" --set-file tls.key="$KEY_FILE_TLS"
 
 kubectl rollout status deployment/config-server -n hopr --timeout=120s
 kubectl rollout status deployment/keygen-service -n hopr --timeout=120s
-kubectl rollout status deployment/shortener-service -n hopr --timeout=120s
-kubectl rollout status deployment/resolver-service -n hopr --timeout=120s
+# A Rollout is not a Deployment, so `kubectl rollout status` cannot read it and the
+# `kubectl argo rollouts` plugin is not a prerequisite of this script. Wait on the phase the
+# controller writes instead; Healthy means the canary finished (or was skipped on a fresh
+# install, which has no previous version to canary against).
+# The timeout covers the whole canary, not just pod startup: every pause in
+# values.yaml's canary.steps (120s today) plus a startup budget for each successive wave.
+kubectl wait --for=jsonpath='{.status.phase}'=Healthy rollout/shortener-service -n hopr --timeout=600s
+kubectl wait --for=jsonpath='{.status.phase}'=Healthy rollout/resolver-service -n hopr --timeout=600s
 kubectl rollout status deployment/frontend -n hopr --timeout=120s
 
 # The controller reloads when the hopr-tls Secret appears, so on a fresh install the
