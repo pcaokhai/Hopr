@@ -79,10 +79,15 @@ for svc in shortener-service resolver-service; do
   rollout=$(render -s "templates/$svc.yaml" | doc "kind: Rollout")
   [ -n "$rollout" ] || fail "$svc does not render a Rollout"
   grep -q "name: $svc$" <<<"$rollout" || fail "Rollout is not named $svc"
-  steps=$(printf '%s' "$rollout" | block 'steps:')
-  for want in 'setWeight: 20' 'duration: 60s' 'setWeight: 50' 'setWeight: 100'; do
-    grep -qF -- "$want" <<<"$steps" || fail "$svc canary steps missing '$want': $steps"
-  done
+  canary=$(printf '%s' "$rollout" | block 'canary:')
+  # Surge-first: a canary step must never take a stable replica down before its
+  # replacement is Ready, at any replica count the HPA has scaled to.
+  expect "$svc canary maxUnavailable" "$(printf '%s' "$canary" | value maxUnavailable)" "0"
+  # The schedule is an ordered sequence, not a set: a `setWeight: 100` first would render a
+  # meaningless canary while still containing every string below.
+  steps=$(printf '%s' "$rollout" | block 'steps:' | sed '1d;s/[ -]*//g' | paste -sd, -)
+  expect "$svc canary steps" "$steps" \
+    "setWeight:20,pause:,duration:60s,setWeight:50,pause:,duration:60s,setWeight:100"
   if render -s "templates/$svc.yaml" | grep -q 'kind: Deployment'; then
     fail "$svc still renders a Deployment"
   fi

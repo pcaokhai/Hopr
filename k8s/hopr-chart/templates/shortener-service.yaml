@@ -35,6 +35,10 @@ spec:
   replicas: {{ .Values.shortenerService.replicaCount }}
   strategy:
     canary:
+      # Surge-first at every replica count: never drop below the stable replica count during
+      # a canary step. Both default to 25% of the current replicas otherwise.
+      maxUnavailable: 0
+      maxSurge: 1
       steps:
         {{- toYaml .Values.canary.steps | nindent 8 }}
   selector:

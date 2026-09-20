@@ -132,8 +132,8 @@ if ! kubectl get crd rollouts.argoproj.io >/dev/null 2>&1; then
   kubectl create namespace argo-rollouts --dry-run=client -o yaml | kubectl apply -f -
   kubectl apply -n argo-rollouts \
     -f https://github.com/argoproj/argo-rollouts/releases/download/v1.7.2/install.yaml
+  kubectl -n argo-rollouts rollout status deployment/argo-rollouts --timeout=180s
 fi
-kubectl -n argo-rollouts rollout status deployment/argo-rollouts --timeout=180s
 
 ./k8s/build-and-load.sh
 
@@ -168,12 +168,10 @@ kubectl rollout status deployment/keygen-service -n hopr --timeout=120s
 # `kubectl argo rollouts` plugin is not a prerequisite of this script. Wait on the phase the
 # controller writes instead; Healthy means the canary finished (or was skipped on a fresh
 # install, which has no previous version to canary against).
-kubectl wait --for=jsonpath='{.status.phase}'=Healthy rollout/shortener-service -n hopr --timeout=300s
-# A Rollout is not a Deployment, so `kubectl rollout status` cannot read it and the
-# `kubectl argo rollouts` plugin is not a prerequisite of this script. Wait on the phase the
-# controller writes instead; Healthy means the canary finished (or was skipped on a fresh
-# install, which has no previous version to canary against).
-kubectl wait --for=jsonpath='{.status.phase}'=Healthy rollout/resolver-service -n hopr --timeout=300s
+# The timeout covers the whole canary, not just pod startup: every pause in
+# values.yaml's canary.steps (120s today) plus a startup budget for each successive wave.
+kubectl wait --for=jsonpath='{.status.phase}'=Healthy rollout/shortener-service -n hopr --timeout=600s
+kubectl wait --for=jsonpath='{.status.phase}'=Healthy rollout/resolver-service -n hopr --timeout=600s
 kubectl rollout status deployment/frontend -n hopr --timeout=120s
 
 # The controller reloads when the hopr-tls Secret appears, so on a fresh install the
