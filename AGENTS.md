@@ -135,6 +135,24 @@ for why a shared fixture plus two JUnit tests was chosen over a contract-testing
 (shortener-service, consumer) for the pattern to copy for a future service boundary (e.g. Phase
 5's event-driven work). These run as part of `./gradlew test` like any other test.
 
+## Events (Kafka)
+
+A single-broker, KRaft-mode Kafka (`docker-compose.yml`'s `kafka` service /
+`k8s/hopr-chart/templates/kafka.yaml`) carries two producer-side events, both defined as
+shared records in `common/src/main/java/com/pcaokhai/common/event/` and schema-documented in
+`docs/events/` (same fixture-file pattern as `docs/contracts/`): `UrlCreatedEvent`, published
+from `shortener-service`'s `CachePrimePoller`/`UrlCreatedEventPublisher` for every outbox
+record it processes (piggybacking on the outbox mechanism from the prior PR rather than a
+second poll-and-mark-processed loop over the same table), and `ClickEvent`, published
+fire-and-forget from `resolver-service`'s `ResolverUseCase`/`ClickEventPublisher` after a
+successful redirect, with no outbox record behind it since a redirect writes nothing durable
+to hang one on. Both services' `KafkaTemplate` beans are hand-built in their own `KafkaConfig`
+(not Boot's autoconfigured one) because Boot's `KafkaTemplate<Object, Object>` doesn't satisfy
+a `KafkaTemplate<String, <EventType>>` injection point — generic bean matching is invariant.
+There is no consumer yet: writing these events into `url_click_counts`/`url_click_events`
+(Phase 1's schema) is a deliberately separate, later PR so the hot redirect path never blocks
+on write-heavy analytics consumption.
+
 ## Load testing
 
 `scripts/load-test-resolver.sh` runs a k6 load test (`resolver-service/loadtest/`) against the
