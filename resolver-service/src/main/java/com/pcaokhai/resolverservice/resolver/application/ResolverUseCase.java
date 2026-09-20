@@ -16,6 +16,7 @@
 package com.pcaokhai.resolverservice.resolver.application;
 
 import com.pcaokhai.common.url.model.UrlMapping;
+import com.pcaokhai.resolverservice.infra.kafka.ClickEventPublisher;
 import org.springframework.stereotype.Service;
 
 /**
@@ -29,10 +30,12 @@ public class ResolverUseCase {
 
    private final CacheLookup cacheLookup;
    private final DbLookup dbLookup;
+   private final ClickEventPublisher clickEventPublisher;
 
-    public ResolverUseCase(CacheLookup cacheLookup, DbLookup dbLookup) {
+    public ResolverUseCase(CacheLookup cacheLookup, DbLookup dbLookup, ClickEventPublisher clickEventPublisher) {
         this.cacheLookup = cacheLookup;
         this.dbLookup = dbLookup;
+        this.clickEventPublisher = clickEventPublisher;
     }
 
     public String resolve(String shortKey) {
@@ -43,6 +46,7 @@ public class ResolverUseCase {
                 saveInCache(shortKey, longUrl);
             }
         }
+        clickEventPublisher.publishClick(shortKey);
         return longUrl.getLongUrl();
     }
 

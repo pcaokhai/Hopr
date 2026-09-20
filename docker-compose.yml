@@ -264,6 +264,42 @@ services:
     networks:
       - default
 
+  # -------------------- Kafka --------------------
+  # Single broker in KRaft mode (no ZooKeeper) rather than a multi-broker cluster: this is a
+  # learning-project producer at one node's worth of throughput, both event topics have no
+  # consumer yet, and a real multi-broker cluster's value -- replication surviving a broker
+  # loss -- has nothing to demonstrate without a second broker to fail over to. If a future
+  # phase adds a consumer group and wants to show partition rebalancing or replication, scale
+  # this to 3 brokers then; until that's the concept being taught, one broker is the honest
+  # amount of infrastructure for what this PR does with it.
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: hopr-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      CLUSTER_ID: hopr-kafka-dev-cluster
+    volumes:
+      - ./data/kafka:/var/lib/kafka/data
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+    networks:
+      - default
+
   # -------------------- Spring Boot Microservices --------------------
   config-server:
     # Compose SIGKILLs 10s after SIGTERM by default, which would cut the 20s graceful
@@ -332,6 +368,8 @@ services:
         condition: service_started
       scylla-node-1:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
     networks:
       - default
 
@@ -360,6 +398,8 @@ services:
       redis-cluster-init:
         condition: service_started
       scylla-node-1:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     networks:
       - default

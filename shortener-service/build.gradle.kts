@@ -13,10 +13,13 @@ dependencies {
     implementation("org.springframework.retry:spring-retry")
     implementation("org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j")
     implementation("org.springframework.boot:spring-boot-jackson2")
+    implementation("org.springframework.kafka:spring-kafka")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.mockito:mockito-inline:5.2.0")
     testImplementation("org.testcontainers:testcontainers-cassandra")
+    testImplementation("org.testcontainers:kafka:1.21.4")
+    testImplementation("org.springframework.kafka:spring-kafka-test")
 }
 
 tasks.named<Test>("test") {

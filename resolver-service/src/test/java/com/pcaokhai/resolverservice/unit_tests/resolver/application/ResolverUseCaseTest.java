@@ -2,6 +2,7 @@ package com.pcaokhai.resolverservice.unit_tests.resolver.application;
 
 import com.pcaokhai.common.url.model.UrlMapping;
 import com.pcaokhai.resolverservice.exception.KeyNotFoundException;
+import com.pcaokhai.resolverservice.infra.kafka.ClickEventPublisher;
 import com.pcaokhai.resolverservice.resolver.application.CacheLookup;
 import com.pcaokhai.resolverservice.resolver.application.DbLookup;
 import com.pcaokhai.resolverservice.resolver.application.ResolverUseCase;
@@ -30,6 +31,9 @@ class ResolverUseCaseTest {
 
     @Mock
     private UrlMapping urlMapping;
+
+    @Mock
+    private ClickEventPublisher clickEventPublisher;
 
     @InjectMocks
     private ResolverUseCase resolverUseCase;

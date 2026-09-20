@@ -14,6 +14,7 @@ data:
   REDIS_PORT: {{ .Values.redis.port | quote }}
   REDIS_TIMEOUT: {{ .Values.redis.timeout | quote }}
   SPRING_CACHE_TYPE: "redis"
+  KAFKA_BOOTSTRAP_SERVERS: "hopr-kafka:9092"
   SHORTENER_SERVER_PORT: {{ .Values.config.shortenerServerPort | quote }}
   RESOLVER_SERVER_PORT: {{ .Values.config.resolverServerPort | quote }}
   KEYGEN_SERVER_PORT: {{ .Values.config.keygenServerPort | quote }}

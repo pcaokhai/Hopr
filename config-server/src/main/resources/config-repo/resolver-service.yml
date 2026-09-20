@@ -28,3 +28,10 @@ spring:
           - ${REDIS_NODE_4}
           - ${REDIS_NODE_5}
           - ${REDIS_NODE_6}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false

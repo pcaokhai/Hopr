@@ -1,0 +1,99 @@
+# Single broker in KRaft mode, same choice as docker-compose.yml's `kafka` service (see
+# its comment for why one broker is the honest amount of infrastructure here). A Deployment
+# with a PVC is enough for one broker with no peers to coordinate with; a StatefulSet only
+# earns its keep once there's more than one broker identity to keep stable, as ScyllaDB's
+# does. Restarting the single pod loses in-flight unacked messages, which is why both
+# producers in this PR are documented as best-effort rather than depended on for durability.
+apiVersion: v1
+kind: Service
+metadata:
+  name: hopr-kafka
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: hopr-kafka
+  ports:
+    - name: broker
+      port: 9092
+      targetPort: 9092
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hopr-kafka
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: hopr-kafka
+  template:
+    metadata:
+      labels:
+        app: hopr-kafka
+    spec:
+      containers:
+        - name: kafka
+          image: {{ .Values.kafka.image }}
+          env:
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: "broker,controller"
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://hopr-kafka:9092"
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: "CONTROLLER"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: "1@localhost:9093"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: CLUSTER_ID
+              value: "hopr-kafka-dev-cluster"
+          ports:
+            - name: broker
+              containerPort: 9092
+          resources:
+            requests:
+              cpu: {{ .Values.kafka.resources.requests.cpu }}
+              memory: {{ .Values.kafka.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.kafka.resources.limits.cpu }}
+              memory: {{ .Values.kafka.resources.limits.memory }}
+          readinessProbe:
+            exec:
+              command: ["/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 12
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/kafka/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: hopr-kafka-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hopr-kafka-data
+  namespace: {{ .Values.namespace }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- with .Values.kafka.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.kafka.storage }}
