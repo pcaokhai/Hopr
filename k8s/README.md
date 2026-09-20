@@ -21,8 +21,8 @@ kind cluster "hopr"
          ├─ StatefulSet/Service: hopr-scylladb       (scylladb/scylla:6.2, 3 nodes)
          ├─ Deployment/Service: config-server         (port 8888)
          ├─ Deployment/Service: keygen-service        (port 8081)
-         ├─ Deployment/Service: shortener-service     (port 8080)
-         ├─ Deployment/Service: resolver-service       (port 8083)
+         ├─ Rollout/Service:    shortener-service     (port 8080)  (canary)
+         ├─ Rollout/Service:    resolver-service      (port 8083)  (canary)
          └─ Deployment/Service: frontend               (port 3000)
      └─ ingress-nginx (installed separately via upstream manifest)
          ├─ Ingress: hopr-ingress — /, /dashboard and /api to the frontend,
@@ -200,7 +200,8 @@ This will, in order:
    `shortener-service` and `resolver-service` open a session against the `hopr`
    keyspace at boot, which is why they are not created until this has run.
 8. `helm upgrade --install hopr ./k8s/hopr-chart` — adds (or upgrades) the two URL services.
-9. Wait for every Deployment's rollout to finish.
+9. Wait for every workload's rollout to finish (the two Rollouts via their
+   `Healthy` phase, since `kubectl rollout status` cannot read a Rollout).
 
 The script uses `set -euo pipefail` and is **idempotent** — re-running it on
 an already-deployed cluster is safe (`helm upgrade --install` and
@@ -276,7 +277,7 @@ update `config.shortenerDomain` in `k8s/hopr-chart/values.yaml` to match.
 
 ### Resource requests/limits and autoscaling
 
-Every backend Deployment's `replicaCount` and `resources.requests`/`limits` are parameterized
+Every backend workload's `replicaCount` and `resources.requests`/`limits` are parameterized
 in `k8s/hopr-chart/values.yaml`, whose comments explain the starter numbers, the JVM
 container-awareness caveat, and why the scheduler/HPA need requests specifically. `shortener-service`
 and `resolver-service` also get a `HorizontalPodAutoscaler` (`templates/hpa.yaml`, CPU-utilization
@@ -286,7 +287,7 @@ against a running cluster with `k8s/autoscaling-test.sh`.
 ### Disruption budgets and zone spreading (not verifiable locally)
 
 `templates/pdb.yaml` gives `shortener-service` and `resolver-service` a
-`PodDisruptionBudget` with `maxUnavailable: 1`, and both Deployments carry a
+`PodDisruptionBudget` with `maxUnavailable: 1`, and both workloads carry a
 `topologySpreadConstraints` entry keyed on `topology.kubernetes.io/zone`
 (`maxSkew: 1`, `whenUnsatisfiable: ScheduleAnyway`), rendered from
 `templates/_helpers.tpl` and tunable under `topologySpread` /

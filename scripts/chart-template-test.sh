@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Asserts that `helm template` renders the disruption/scheduling resources the chart is
-# supposed to produce: a PodDisruptionBudget per request-serving Deployment, and
-# zone-keyed topologySpreadConstraints on those Deployments' pod specs.
+# supposed to produce: a PodDisruptionBudget per request-serving workload, zone-keyed
+# topologySpreadConstraints on those workloads' pod specs, and the canary Rollouts
+# (plus their HPA scaleTargetRefs) those two services are deployed as.
 #
 # This checks CONFIGURATION ONLY. It cannot and does not test runtime behaviour: whether
 # the eviction API actually honours the budget during a node drain, or whether the

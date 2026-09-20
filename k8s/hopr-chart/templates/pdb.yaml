@@ -1,12 +1,12 @@
 {{- if .Values.urlServices.enabled }}
 {{- /*
 PodDisruptionBudgets for the two request-serving hot paths, i.e. exactly the two
-Deployments that hpa.yaml can scale above one replica. A PDB constrains only
+workloads (Argo Rollouts) that hpa.yaml can scale above one replica. A PDB constrains only
 *voluntary* disruptions -- `kubectl drain`, cluster-autoscaler node removal, a node-pool
 upgrade -- and does nothing about a node crashing or a kubelet dying.
 
 maxUnavailable (not minAvailable) on purpose. Both HPAs have minReplicas: 1, so at the
-quiet baseline these Deployments run a single pod. `minAvailable: 1` would then mean
+quiet baseline these workloads run a single pod. `minAvailable: 1` would then mean
 "zero evictions allowed", which blocks a node drain indefinitely and makes cluster
 maintenance impossible -- the classic too-strict PDB. `maxUnavailable: 1` always permits
 exactly one eviction at a time: at 1 replica the drain proceeds (briefly dropping the
