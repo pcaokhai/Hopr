@@ -18,6 +18,7 @@ data:
   SHORTENER_SERVER_PORT: {{ .Values.config.shortenerServerPort | quote }}
   RESOLVER_SERVER_PORT: {{ .Values.config.resolverServerPort | quote }}
   KEYGEN_SERVER_PORT: {{ .Values.config.keygenServerPort | quote }}
+  CLICK_ANALYTICS_SERVER_PORT: {{ .Values.config.clickAnalyticsServerPort | quote }}
   SHORTENER_DOMAIN: {{ .Values.config.shortenerDomain | quote }}
   # SHA-256 digests of the API keys accepted on POST /shorten -- digests, not keys, so this
   # belongs in the ConfigMap rather than hopr-secret. The plaintext keys live with the clients.

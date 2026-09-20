@@ -65,6 +65,7 @@ config:
   shortenerServerPort: "8080"
   resolverServerPort: "8083"
   keygenServerPort: "8081"
+  clickAnalyticsServerPort: "8084"
   frontendPort: "3000"
   shortenerDomain: "https://localhost:8443/"
   # REQUIRED, no default: comma-separated SHA-256 digests of the keys accepted on POST /shorten.
@@ -112,6 +113,19 @@ resolverService:
     targetCPUUtilizationPercentage: 70
 
 keygenService:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 200m
+      memory: 320Mi
+    limits:
+      cpu: 500m
+      memory: 448Mi
+
+# The Kafka consumer for click analytics. No HPA: it isn't request-serving, and this repo
+# has no scaling need for it yet -- see the PR description for how a second replica would
+# behave once one is actually needed (Kafka splits url-clicked's partitions across the group).
+clickAnalyticsService:
   replicaCount: 1
   resources:
     requests:

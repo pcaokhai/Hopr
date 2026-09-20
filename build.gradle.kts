@@ -5,7 +5,7 @@ plugins {
     id("jacoco")
 }
 
-val bootApps = setOf("shortener-service", "resolver-service", "keygen-service", "config-server")
+val bootApps = setOf("shortener-service", "resolver-service", "keygen-service", "config-server", "click-analytics-service")
 
 allprojects {
     group = "com.pcaokhai"

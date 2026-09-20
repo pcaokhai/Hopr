@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: click-analytics-service
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.clickAnalyticsService.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: click-analytics-service
+  template:
+    metadata:
+      labels:
+        app: click-analytics-service
+    spec:
+      # Must exceed the app's own drain budget (5s preStop + spring.lifecycle
+      # .timeout-per-shutdown-phase=20s in config-repo/application.yml); the kubelet
+      # SIGKILLs at this limit no matter how much draining is left.
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: click-analytics-service
+          image: "hopr/click-analytics-service:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.config.clickAnalyticsServerPort }}
+          env:
+            # eclipse-temurin:25-jre is container-aware by default; cap the heap at a
+            # share of the container memory *limit* below, leaving room for metaspace,
+            # thread stacks and native buffers.
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=75.0"
+          envFrom:
+            - configMapRef:
+                name: hopr-config
+            - secretRef:
+                name: hopr-secret
+          resources:
+            {{- toYaml .Values.clickAnalyticsService.resources | nindent 12 }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ .Values.config.clickAnalyticsServerPort }}
+            failureThreshold: 12
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ .Values.config.clickAnalyticsServerPort }}
+            initialDelaySeconds: 25
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ .Values.config.clickAnalyticsServerPort }}
+            initialDelaySeconds: 40
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: click-analytics-service
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: click-analytics-service
+  ports:
+    - port: {{ .Values.config.clickAnalyticsServerPort }}
+      targetPort: {{ .Values.config.clickAnalyticsServerPort }}

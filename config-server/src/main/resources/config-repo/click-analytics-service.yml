@@ -1,0 +1,23 @@
+server:
+  port: ${CLICK_ANALYTICS_SERVER_PORT}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+spring:
+  cassandra:
+    contact-points: ${SCYLLA_CONTACT_POINTS}
+    port: ${SCYLLA_PORT}
+    keyspace-name: ${SCYLLA_KEYSPACE}
+    local-datacenter: ${SCYLLA_DATACENTER}
+    schema-action: none
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    consumer:
+      group-id: click-analytics-service

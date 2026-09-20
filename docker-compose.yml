@@ -404,6 +404,35 @@ services:
     networks:
       - default
 
+  click-analytics-service:
+    # Compose SIGKILLs 10s after SIGTERM by default, which would cut the 20s graceful
+    # drain short; 30s matches the pods' terminationGracePeriodSeconds.
+    stop_grace_period: 30s
+    build:
+      context: ./click-analytics-service
+      dockerfile: Dockerfile
+    image: hopr/click-analytics-service:latest
+    container_name: hopr-click-analytics-service
+    environment:
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=25.0"
+    env_file:
+      # Non-secret config and credentials are split the same way the Helm chart splits
+      # hopr-config (ConfigMap) from hopr-secret (Secret). Both files are gitignored;
+      # copy them from .env.example / .env.secrets.example on a fresh clone.
+      - .env
+      - .env.secrets
+    ports:
+      - "8084:8084"
+    depends_on:
+      config-server:
+        condition: service_started
+      scylla-node-1:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - default
+
 networks:
   default:
     driver: bridge
