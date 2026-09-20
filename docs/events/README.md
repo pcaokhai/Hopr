@@ -1,21 +1,25 @@
 # Kafka event schemas
 
 Fixture files here are the single source of truth for a Kafka message shape published by
-one service and consumed by another (today: this PR's own producer-side tests; from the
-next PR in the Phase 5 queue onward, also a consumer). Each fixture is read verbatim by a
-test on every side that touches the shape it names, the same pattern `docs/contracts/`
-uses for HTTP request/response bodies — see that directory's README for why a shared
-fixture plus ordinary JUnit tests is enough here instead of a schema registry or a
-framework like Pact.
+one service and consumed by another. Each fixture is read verbatim by a test on every side
+that touches the shape it names, the same pattern `docs/contracts/` uses for HTTP
+request/response bodies — see that directory's README for why a shared fixture plus
+ordinary JUnit tests is enough here instead of a schema registry or a framework like Pact.
 
 - `url-created-event.json` — `UrlCreatedEvent` (`com.pcaokhai.common.event.UrlCreatedEvent`),
   published to the `url-created` topic by `shortener-service`'s `CachePrimePoller` /
   `UrlCreatedEventPublisher` for every short link that's durably persisted. Asserted against
-  by `shortener-service`'s `UrlCreatedEventPublisherIntegrationTest`.
+  by `shortener-service`'s `UrlCreatedEventPublisherIntegrationTest`. No consumer reads this
+  topic: nothing in the click-analytics tables (`url_click_counts`/`url_click_events`) has a
+  natural home for "a link was created", so `click-analytics-service` only consumes
+  `url-clicked`.
 - `url-clicked-event.json` — `ClickEvent` (`com.pcaokhai.common.event.ClickEvent`), published
   to the `url-clicked` topic by `resolver-service`'s `ClickEventPublisher` after every
   successful redirect. Asserted against by `resolver-service`'s
-  `ClickEventPublisherIntegrationTest`.
+  `ClickEventPublisherIntegrationTest`, and consumed by `click-analytics-service`'s
+  `ClickEventConsumer` (consumer group `click-analytics-service`), which writes it into the
+  `url_click_counts` counter table and the `url_click_events` log — see that service's PR
+  description for the consumer-group and at-least-once delivery trade-offs.
 
 ## Versioning
 

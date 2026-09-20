@@ -149,9 +149,22 @@ successful redirect, with no outbox record behind it since a redirect writes not
 to hang one on. Both services' `KafkaTemplate` beans are hand-built in their own `KafkaConfig`
 (not Boot's autoconfigured one) because Boot's `KafkaTemplate<Object, Object>` doesn't satisfy
 a `KafkaTemplate<String, <EventType>>` injection point — generic bean matching is invariant.
-There is no consumer yet: writing these events into `url_click_counts`/`url_click_events`
-(Phase 1's schema) is a deliberately separate, later PR so the hot redirect path never blocks
-on write-heavy analytics consumption.
+`click-analytics-service` is the only consumer: it reads `url-clicked` (not `url-created` —
+nothing in the two tables below has a natural home for "a link was created") under the
+stable, documented consumer group `click-analytics-service` (`ClickEventConsumer`,
+`ClickEventConsumer.GROUP_ID`), so a future second replica added for scaling splits the
+topic's partitions instead of each instance reprocessing every record. It writes each
+`ClickEvent` into Phase 1's previously-unused `url_click_counts` (a Scylla counter table,
+`UPDATE ... SET clicks = clicks + 1`) and `url_click_events` (`ClickAnalyticsRecorder`). Kafka
+is at-least-once, so a redelivered click can double-count in `url_click_counts` — there is no
+idempotency key to dedupe a counter increment on; `url_click_events`' primary key
+`(short_key, day, clicked_at)` does not have this problem, since a redelivery of the same
+event carries the same `clickedAt` and simply overwrites the identical row instead of
+duplicating it. A malformed message is logged and skipped (`ErrorHandlingDeserializer` +
+`DefaultErrorHandler` with no retry) rather than blocking the partition or crashing the
+listener. It is deliberately its own Spring Boot service/module rather than a component
+bolted onto `resolver-service`, so an analytics-side slowdown or crash can never affect the
+hot redirect path, and it can be deployed and scaled independently of it.
 
 ## Load testing
 
