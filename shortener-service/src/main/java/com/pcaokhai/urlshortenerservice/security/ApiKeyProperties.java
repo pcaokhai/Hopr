@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The API keys accepted on {@code /shorten} and {@code /links}, each mapped to the owner it
+ * The API keys accepted on {@code /v1/shorten} and {@code /v1/links}, each mapped to the owner it
  * identifies. Configured as {@code <sha-256 hex digest>:<owner-id>} entries -- only digests,
  * never the keys themselves, so a leaked config file, config-server response, or process dump
  * yields nothing a caller can replay against the API.

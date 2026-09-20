@@ -34,7 +34,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Rejects {@code /shorten} requests that do not carry a known {@code X-API-Key} header.
+ * Rejects {@code /v1/shorten} and {@code /v1/links} requests that do not carry a known
+ * {@code X-API-Key} header.
  *
  * <p>The write path is the abusable one -- every accepted request costs a keygen round trip and a
  * durable row -- so it is gated. The resolver's redirect path is deliberately not: a shortened link
