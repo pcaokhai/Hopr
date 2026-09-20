@@ -105,7 +105,7 @@ docker compose up -d --build
 ```
 
 This command will:
-1. Build local Docker images for `config-server`, `keygen-service`, `shortener-service`, and `resolver-service`.
+1. Build local Docker images for `config-server`, `keygen-service`, `shortener-service`, `resolver-service`, and `click-analytics-service`.
 2. Start the 6 `redis-node` containers (the `scylla-node` containers are already up).
 3. Trigger `redis-cluster-init` to assemble the cluster.
 4. Launch `api-gateway` and all backend microservices once `scylla-node-1` reports healthy.
@@ -138,12 +138,12 @@ docker compose logs -f api-gateway
 
 ### Step 6: Verify the Services Do Not Run as Root
 
-The four Spring Boot images and the `frontend` image create an unprivileged `appuser` (uid 1001) and switch to it with
+The five Spring Boot images and the `frontend` image create an unprivileged `appuser` (uid 1001) and switch to it with
 `USER`, so a container-breakout vulnerability lands as an unprivileged host user instead of
 host root. Confirm it after any Dockerfile change:
 
 ```bash
-for s in config-server keygen-service resolver-service shortener-service frontend; do
+for s in config-server keygen-service resolver-service shortener-service click-analytics-service frontend; do
   echo -n "$s: "; docker compose exec -T "$s" id -un
 done
 ```
@@ -162,7 +162,7 @@ docker run --rm --entrypoint id hopr/shortener-service:latest
 
 ### Test 1: Config Server Dependency Check
 
-`config-server` has no dashboard UI — it's a plain config-serving REST API. It is a required running dependency: `keygen-service`, `shortener-service`, and `resolver-service` all fetch their configuration from it at startup (`http://config-server:8888` on the Docker network) and will fail to start if it's not healthy. Confirm it's up via:
+`config-server` has no dashboard UI — it's a plain config-serving REST API. It is a required running dependency: `keygen-service`, `shortener-service`, `resolver-service`, and `click-analytics-service` all fetch their configuration from it at startup (`http://config-server:8888` on the Docker network) and will fail to start if it's not healthy. Confirm it's up via:
 
 ```bash
 docker compose ps config-server
