@@ -122,7 +122,8 @@ has the command that verifies it.
 
 ## Tests
 
-`scripts/run-tests.sh` runs every suite (Gradle, then `frontend/` `npm test`) and is the
+`scripts/run-tests.sh` runs every suite (Gradle, the Helm chart assertions in
+`scripts/chart-template-test.sh`, then `frontend/` `npm test`) and is the
 deterministic test command in `.no-mistakes.yaml`; no-mistakes reads that file from `main`
 only, so edits to it take effect after they land there.
 
@@ -165,6 +166,17 @@ duplicating it. A malformed message is logged and skipped (`ErrorHandlingDeseria
 listener. It is deliberately its own Spring Boot service/module rather than a component
 bolted onto `resolver-service`, so an analytics-side slowdown or crash can never affect the
 hot redirect path, and it can be deployed and scaled independently of it.
+
+## Kubernetes disruption and scheduling
+
+The chart's PodDisruptionBudgets (`k8s/hopr-chart/templates/pdb.yaml`) and zone
+`topologySpreadConstraints` (`templates/_helpers.tpl`) apply to `shortener-service` and
+`resolver-service` only -- the two Deployments an HPA can scale past one replica. Those
+files carry the reasoning (why `maxUnavailable` against `minReplicas: 1`, why spread
+constraints over pod anti-affinity). The local `kind` cluster is single-node with no zone
+labels, so neither resource's runtime behaviour is observable here; `k8s/README.md`'s
+"Disruption budgets and zone spreading" section is the authoritative note on that limit
+and on what a real multi-zone cluster would change.
 
 ## Load testing
 

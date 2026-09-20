@@ -75,6 +75,8 @@ k8s/
                               exempt from the write-path rate limit
       hpa.yaml                 HorizontalPodAutoscalers for shortener-service and
                               resolver-service (CPU-utilization based)
+      pdb.yaml                 PodDisruptionBudgets for the same two services
+      _helpers.tpl             shared template helpers (zone topologySpreadConstraints)
 ```
 
 ## Why Helm for the app layer, and why ScyllaDB isn't a Bitnami chart
@@ -275,6 +277,46 @@ container-awareness caveat, and why the scheduler/HPA need requests specifically
 and `resolver-service` also get a `HorizontalPodAutoscaler` (`templates/hpa.yaml`, CPU-utilization
 based) behind `<service>.autoscaling.enabled`. Verify both the requests and the scaling behavior
 against a running cluster with `k8s/autoscaling-test.sh`.
+
+### Disruption budgets and zone spreading (not verifiable locally)
+
+`templates/pdb.yaml` gives `shortener-service` and `resolver-service` a
+`PodDisruptionBudget` with `maxUnavailable: 1`, and both Deployments carry a
+`topologySpreadConstraints` entry keyed on `topology.kubernetes.io/zone`
+(`maxSkew: 1`, `whenUnsatisfiable: ScheduleAnyway`), rendered from
+`templates/_helpers.tpl` and tunable under `topologySpread` /
+`<service>.pdb` in `values.yaml`. Both template files carry the reasoning:
+why `maxUnavailable` rather than `minAvailable` against an HPA whose
+`minReplicas` is 1, and why spread constraints rather than pod anti-affinity.
+
+**Be clear about what this repo can and cannot show.** A PodDisruptionBudget
+constrains only *voluntary* disruptions — `kubectl drain`, a cluster-autoscaler
+node removal, a node-pool upgrade — and does nothing when a node simply crashes.
+Zone spreading only does anything when nodes actually carry
+`topology.kubernetes.io/zone` labels. This repo's local environment is a
+**single-node `kind` cluster with no zone labels at all**, so locally:
+
+- there is no second node to drain a pod onto, so the eviction path the PDB
+  guards is never exercised;
+- every pod lands on the one node regardless of the spread constraint, which
+  under `ScheduleAnyway` is satisfied vacuously and has no observable effect.
+
+What local testing *can* prove is that the configuration is valid and does not
+break deployment: `scripts/chart-template-test.sh` asserts both resources render
+with the expected values, and the rendered manifests pass the cluster's own
+admission/validation via
+
+```bash
+helm template hopr ./k8s/hopr-chart --set tls.crt=d --set tls.key=d \
+  -s templates/pdb.yaml -s templates/shortener-service.yaml \
+  -s templates/resolver-service.yaml | kubectl apply --dry-run=server -f -
+``` Observing the actual behaviour — a drain blocking at the budget, or
+replicas landing in different zones — requires a real multi-node, multi-zone
+cluster (a managed EKS/GKE/AKS cluster with genuine zone labels). A production
+values file on such a cluster should also reconsider
+`topologySpread.whenUnsatisfiable`, which is `ScheduleAnyway` here purely so the
+single-node local cluster can schedule at all; `DoNotSchedule` is the stricter
+and generally correct production setting.
 
 ### Tearing down
 

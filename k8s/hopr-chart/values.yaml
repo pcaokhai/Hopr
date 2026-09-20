@@ -56,6 +56,17 @@ shortenApiKey: ""
 # k8s/deploy.sh mints a local self-signed pair and passes it with `--set-file`.
 tls: {}
 
+# Zone-spreading for the two request-serving Deployments (shortener, resolver). Rendered
+# by templates/_helpers.tpl, which explains why topologySpreadConstraints is preferred
+# over podAntiAffinity and why whenUnsatisfiable defaults to the soft ScheduleAnyway.
+# Inert on this repo's single-node kind cluster, which has no zone labels at all; a real
+# multi-zone cluster should override whenUnsatisfiable to DoNotSchedule.
+topologySpread:
+  enabled: true
+  topologyKey: topology.kubernetes.io/zone
+  maxSkew: 1
+  whenUnsatisfiable: ScheduleAnyway
+
 urlServices:
   # shortener-service and resolver-service open a CqlSession against keyspace hopr at
   # boot, so deploy.sh installs the chart once with this off, migrates, then turns it on.
@@ -91,6 +102,11 @@ shortenerService:
     limits:
       cpu: 750m
       memory: 512Mi
+  # Voluntary-disruption budget; see templates/pdb.yaml for why maxUnavailable rather
+  # than minAvailable (minAvailable: 1 against this HPA's minReplicas: 1 would block
+  # every node drain).
+  pdb:
+    maxUnavailable: 1
   autoscaling:
     enabled: true
     minReplicas: 1
@@ -106,6 +122,11 @@ resolverService:
     limits:
       cpu: 750m
       memory: 512Mi
+  # Voluntary-disruption budget; see templates/pdb.yaml for why maxUnavailable rather
+  # than minAvailable (minAvailable: 1 against this HPA's minReplicas: 1 would block
+  # every node drain).
+  pdb:
+    maxUnavailable: 1
   autoscaling:
     enabled: true
     minReplicas: 1
