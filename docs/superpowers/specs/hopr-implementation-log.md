@@ -1,5 +1,7 @@
 # Hopr — Implementation Log: Features, Bugs, Decisions & Trade-offs
 
+> **Superseded by `docs/phases/` — a more complete phase-by-phase write-up covering all 6 phases plus testing instructions; this file only covers Phases 1-3.**
+>
 > Companion to `docs/hopr-production-review.md` (the original review) and
 > `docs/superpowers/specs/2026-09-10-hopr-production-roadmap-design.md` (the roadmap this
 > log tracks). This document records, per PR, what was actually built, every bug the
