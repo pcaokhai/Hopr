@@ -198,6 +198,12 @@ listener. It is deliberately its own Spring Boot service/module rather than a co
 bolted onto `resolver-service`, so an analytics-side slowdown or crash can never affect the
 hot redirect path, and it can be deployed and scaled independently of it.
 
+The broker's `KAFKA_LISTENERS` (Compose and the chart alike) must bind with an empty host
+(`PLAINTEXT://:9092,CONTROLLER://:9093`), never `0.0.0.0`: no CONTROLLER entry is advertised,
+so Kafka derives the advertised controller endpoint from `listeners`, and an explicit `0.0.0.0`
+there fails its nonroutable-meta-address validation inside the image's storage-format step --
+before the broker starts, which also strands every service that waits on `kafka: healthy`.
+
 ## Kubernetes disruption and scheduling
 
 The chart's PodDisruptionBudgets (`k8s/hopr-chart/templates/pdb.yaml`) and zone
