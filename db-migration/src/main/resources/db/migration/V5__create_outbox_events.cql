@@ -5,7 +5,7 @@
 -- oldest first" -- so status sits in the partition key alongside the day bucket, letting
 -- that query run as a single-partition read with no ALLOW FILTERING or secondary index.
 --
--- Bucketing by day bounds partition size the same way V4's url_click_events does; a single
+-- Bucketing by day bounds partition size the same way V4's url_click_events does -- a single
 -- fixed bucket would grow into one hot partition pinned to one replica set as volume grows.
 --
 -- Marking an event processed moves it from partition (bucket, 'PENDING') to
