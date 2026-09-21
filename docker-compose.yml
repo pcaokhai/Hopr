@@ -278,7 +278,11 @@ services:
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      # Hosts are deliberately empty (bind-all) rather than 0.0.0.0: with no CONTROLLER
+      # entry in KAFKA_ADVERTISED_LISTENERS, Kafka derives the advertised controller
+      # endpoint from this list, and an explicit 0.0.0.0 there fails validateValues'
+      # "advertised.listeners cannot use the nonroutable meta-address" check at startup.
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT

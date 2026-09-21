@@ -42,8 +42,12 @@ spec:
               value: "1"
             - name: KAFKA_PROCESS_ROLES
               value: "broker,controller"
+            # Empty (bind-all) hosts, not 0.0.0.0: Kafka derives the advertised
+            # controller endpoint from this list when KAFKA_ADVERTISED_LISTENERS has no
+            # CONTROLLER entry, and an explicit 0.0.0.0 fails its nonroutable
+            # meta-address validation before the broker starts.
             - name: KAFKA_LISTENERS
-              value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+              value: "PLAINTEXT://:9092,CONTROLLER://:9093"
             - name: KAFKA_ADVERTISED_LISTENERS
               value: "PLAINTEXT://hopr-kafka:9092"
             - name: KAFKA_CONTROLLER_LISTENER_NAMES
