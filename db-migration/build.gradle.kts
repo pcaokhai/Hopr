@@ -10,8 +10,8 @@
 dependencies {
     // Flyway has no native CQL support; the community plugin adds Cassandra/Scylla,
     // and it reaches the cluster over the ING JDBC wrapper around the DataStax driver.
-    implementation("org.flywaydb:flyway-core:13.6.0")
-    runtimeOnly("org.flywaydb:flyway-database-cassandra:13.6.0")
+    implementation("org.flywaydb:flyway-core:13.8.0")
+    runtimeOnly("org.flywaydb:flyway-database-cassandra:13.8.0")
     runtimeOnly("com.ing.data:cassandra-jdbc-wrapper:5.0.3")
 }
 
