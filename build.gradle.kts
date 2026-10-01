@@ -47,7 +47,7 @@ subprojects {
             mavenBom("org.springframework.cloud:spring-cloud-dependencies:2025.1.3")
         }
         dependencies {
-            dependency("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0")
+            dependency("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
             dependency("org.apache.commons:commons-compress:1.28.0")
         }
     }
